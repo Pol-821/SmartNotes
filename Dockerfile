@@ -3,8 +3,6 @@ WORKDIR /src
 
 COPY SmartNotes.slnx .
 COPY SmartNotes.Api/SmartNotes.Api.csproj SmartNotes.Api/
-COPY SmartNotes.Whisper/SmartNotes.Whisper.csproj SmartNotes.Whisper/
-COPY SmartNotes.Whisper.Test/SmartNotes.Whisper.Test.csproj SmartNotes.Whisper.Test/
 
 RUN dotnet restore SmartNotes.slnx
 
