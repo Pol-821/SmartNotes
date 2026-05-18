@@ -1,10 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY SmartNotes.slnx .
 COPY SmartNotes.Api/SmartNotes.Api.csproj SmartNotes.Api/
 
-RUN dotnet restore SmartNotes.slnx
+RUN dotnet restore SmartNotes.Api/SmartNotes.Api.csproj
 
 COPY . .
 
