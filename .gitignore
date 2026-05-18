@@ -1,0 +1,40 @@
+# Secrets - NEVER commit
+SmartNotes.Api/appsettings.json
+SmartNotes.Api/appsettings.Development.json
+SmartNotes.Api/appsettings.Production.json
+**/*.user
+**/*.secrets.json
+*.env
+
+# Build outputs
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.suo
+*.userprefs
+*swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend)
+smartnotes-web/node_modules/
+smartnotes-web/dist/
+
+# Uploads (user data)
+SmartNotes.Api/Uploads/
+SmartNotes.Api/wwwroot/uploads/
+
+# Temp files
+*.tmp
+*.temp
+
+# Large model files
+SmartNotes.Whisper/models/

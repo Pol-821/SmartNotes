@@ -1,0 +1,6 @@
+@SmartNotes.Api_HostAddress = http://localhost:5065
+
+GET {{SmartNotes.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
