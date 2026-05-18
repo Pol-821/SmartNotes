@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
-import { BookOpen, LogOut, Plus, Search, Folder, GraduationCap, ArrowRight, Loader2 } from 'lucide-react';
+import { BookOpen, LogOut, Search, Folder, GraduationCap, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

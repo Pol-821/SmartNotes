@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { BrainCircuit, Mic, Users, ArrowRight, CheckCircle, Sparkles } from 'lucide-react';
+import { BrainCircuit, Mic, Users, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function LandingScreen() {
   const navigate = useNavigate();

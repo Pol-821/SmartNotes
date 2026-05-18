@@ -1,4 +1,5 @@
-import { ReactNode, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BookOpen, Settings, LogOut, LayoutDashboard, Plus, Loader2, Cpu, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';

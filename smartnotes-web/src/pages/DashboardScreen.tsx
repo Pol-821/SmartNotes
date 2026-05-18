@@ -17,7 +17,7 @@ export default function DashboardScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [failedFileName, setFailedFileName] = useState('');
+  const [failedFileName] = useState('');
 
   const fetchData = async () => {
     try {

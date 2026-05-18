@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
-import { Cpu, Server, Plus, Trash2, Copy, CheckCircle2, Loader2, Factory, Settings2, KeyRound, ArrowLeft } from 'lucide-react';
+import { Cpu, Server, Plus, Trash2, Copy, Loader2, Factory, Settings2, KeyRound, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ export default function RaspberryScreen() {
   
   // Modal de Fabricació (Només per al SuperAdmin)
   const [newDeviceData, setNewDeviceData] = useState<{ serial: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const fetchDevices = async () => {
     try {
@@ -88,9 +87,7 @@ export default function RaspberryScreen() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    setCopied(true);
     toast.success("Copiat al porta-retalls!");
-    setTimeout(() => setCopied(false), 3000);
   };
 
   if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 text-blue-600 animate-spin" /></div>;

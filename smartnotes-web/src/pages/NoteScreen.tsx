@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Calendar, Clock, Download, Play, Share2, FolderOpen, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Download, Play, FolderOpen, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import AudioPlayer from '@/components/AudioPlayer';
