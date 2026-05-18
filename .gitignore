@@ -4,7 +4,11 @@ SmartNotes.Api/appsettings.Development.json
 SmartNotes.Api/appsettings.Production.json
 **/*.user
 **/*.secrets.json
-*.env
+
+# Environment files (never commit real .env, but keep .env.example)
+.env
+smartnotes-web/.env
+!*.env.example
 
 # Build outputs
 **/bin/
