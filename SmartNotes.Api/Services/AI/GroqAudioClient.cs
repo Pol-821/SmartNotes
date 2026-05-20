@@ -207,7 +207,7 @@ public class GroqAudioClient
 
     private async Task<string> DetectLanguageFromTextAsync(string text, CancellationToken ct)
     {
-        var prompt = $@"Detect the language of this text. Respond with ONLY the 2-letter language code (e.g. 'ca', 'es', 'en', 'fr'). Nothing else.
+        var prompt = $@"Detect the language of this text. Respond with ONLY the 2-letter ISO 639-1 language code (e.g. 'ca' for Catalan, 'es' for Spanish, 'en' for English, 'fr' for French). NOT the full language name. ONLY 2 letters. Nothing else.
 
 Text: {text.Substring(0, Math.Min(500, text.Length))}";
 
@@ -216,7 +216,7 @@ Text: {text.Substring(0, Math.Min(500, text.Length))}";
             model = "llama-3.3-70b-versatile",
             messages = new[]
             {
-                new { role = "system", content = "You are a language detector. Respond with only a 2-letter ISO language code." },
+                new { role = "system", content = "You are a language detector. Respond with only a 2-letter ISO language code, like 'ca', 'es', 'en'. Never respond with the full language name." },
                 new { role = "user", content = prompt }
             },
             max_tokens = 10,
@@ -236,7 +236,25 @@ Text: {text.Substring(0, Math.Min(500, text.Length))}";
                 .GetProperty("content")
                 .GetString()?.Trim().ToLower() ?? "";
 
-            return content.Length >= 2 ? content.Substring(0, 2) : "";
+            // Només acceptar codis de 2 lletres ISO
+            if (content.Length == 2 && content.All(char.IsLetter))
+                return content;
+
+            // Si retorna text com "català" o "catalan", intentar mapar
+            var langMap = new Dictionary<string, string>
+            {
+                { "catalan", "ca" }, { "català", "ca" }, { "catala", "ca" },
+                { "spanish", "es" }, { "español", "es" }, { "castellano", "es" },
+                { "english", "en" }, { "anglès", "en" }, { "angles", "en" },
+                { "french", "fr" }, { "français", "fr" }, { "frances", "fr" }
+            };
+            foreach (var kv in langMap)
+            {
+                if (content.Contains(kv.Key))
+                    return kv.Value;
+            }
+
+            return "";
         }
         catch
         {

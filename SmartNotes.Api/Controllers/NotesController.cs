@@ -140,32 +140,48 @@ namespace SmartNotes.Api.Controllers
                 s3Key = await _r2.UploadAsync(ms, audioFile.FileName, mimeType);
             }
 
-            // 2. Extreure la durada real
+            // 2. Extreure la durada real amb ffprobe
             int realDurationSeconds = 0;
+            var tempAudioPath = Path.GetTempFileName() + ext;
             try
             {
-                using (var ms = new MemoryStream())
+                using (var fs = new FileStream(tempAudioPath, FileMode.Create))
                 {
-                    await audioFile.CopyToAsync(ms);
-                    ms.Position = 0;
-                    var tempTagFile = Path.GetTempFileName();
-                    try
-                    {
-                        await System.IO.File.WriteAllBytesAsync(tempTagFile, ms.ToArray());
-                        var tfile = TagLib.File.Create(tempTagFile);
-                        realDurationSeconds = (int)tfile.Properties.Duration.TotalSeconds;
-                    }
-                    finally
-                    {
-                        if (System.IO.File.Exists(tempTagFile))
-                            System.IO.File.Delete(tempTagFile);
-                    }
+                    await audioFile.CopyToAsync(fs);
+                }
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "ffprobe",
+                    Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{tempAudioPath}\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                var proc = new System.Diagnostics.Process { StartInfo = psi };
+                proc.Start();
+                var output = await proc.StandardOutput.ReadToEndAsync();
+                await proc.WaitForExitAsync();
+                if (double.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var dur))
+                {
+                    realDurationSeconds = (int)Math.Ceiling(dur);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[NOTES] Error llegint durada amb TagLib: {ex.Message}. Usant durada per defecte de 10 minuts.");
-                realDurationSeconds = 600;
+                Console.WriteLine($"[NOTES] Error obtenint durada: {ex.Message}");
+                realDurationSeconds = 0;
+            }
+            finally
+            {
+                if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
+            }
+
+            if (realDurationSeconds <= 0)
+            {
+                // Fallback: estimar per mida (assumint ~64kbps per veu)
+                var fileSizeBytes = audioFile.Length;
+                realDurationSeconds = (int)(fileSizeBytes / 8000.0);
+                Console.WriteLine($"[NOTES] Durada estimada per mida: {realDurationSeconds}s");
             }
 
             // 3. Comprovar si té prou minuts

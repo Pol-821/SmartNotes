@@ -5,6 +5,7 @@ using SmartNotes.Api.Data;
 using SmartNotes.Api.Services.AI;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 public class TranscriptionWorker : BackgroundService
 {
@@ -109,7 +110,11 @@ public class TranscriptionWorker : BackgroundService
                         
                         if (user != null && !string.IsNullOrWhiteSpace(user.PreferredLanguage))
                         {
-                            idiomesUsuari = user.PreferredLanguage.Split(',');
+                            var raw = user.PreferredLanguage.Split(',', StringSplitOptions.TrimEntries);
+                            var valids = new HashSet<string> { "ca", "es", "en", "fr", "de", "it", "pt", "eu", "gl", "zh", "ja", "ko", "ar", "hi", "ru", "nl", "pl", "sv", "da", "fi", "no", "cs", "hu", "ro", "sk", "bg", "el", "hr", "sr", "uk", "tr", "th", "vi", "ms", "id", "tl", "sw", "ta", "te", "ml", "kn", "mr", "gu", "pa", "ne", "bn", "ur", "ku", "ha", "af", "am", "yo", "ig", "om", "so", "mt", "ga", "gd", "cy", "lb", "is", "fo", "ht", "jv", "su", "my", "lo", "km", "bo", "dz", "si", "hy", "ka" };
+                            idiomesUsuari = raw.Where(v => valids.Contains(v)).ToArray();
+                            if (idiomesUsuari.Length == 0)
+                                idiomesUsuari = new[] { "ca", "es" };
                         }
                     }
 
