@@ -1,0 +1,7 @@
+pyaudio
+numpy
+gpiozero
+pigpio
+requests
+pygame
+RPi.GPIO

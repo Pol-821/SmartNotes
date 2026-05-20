@@ -10,6 +10,10 @@ SmartNotes.Api/appsettings.Production.json
 smartnotes-web/.env
 !*.env.example
 
+# Raspberry Pi config (secrets)
+SmartNotes.Raspberry/config.json
+!SmartNotes.Raspberry/config.example.json
+
 # Build outputs
 **/bin/
 **/obj/

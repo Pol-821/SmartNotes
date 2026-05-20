@@ -1,0 +1,20 @@
+{
+    "serial_number": "RPI-XXXX-XXXX",
+    "api_base_url": "https://smartnotes-api-971k.onrender.com/api",
+    "raspberry_api_key": "",
+    "servo_pin": 12,
+    "btn_power_pin": 17,
+    "btn_record_pin": 18,
+    "servo_min_pulse": 0.0005,
+    "servo_max_pulse": 0.0025,
+    "servo_step_degrees": 30,
+    "servo_interval_seconds": 5,
+    "servo_max_angle": 90,
+    "audio_sample_rate": 16000,
+    "audio_channels": 2,
+    "audio_chunk_size": 1024,
+    "volume_threshold": 300,
+    "diff_threshold": 150,
+    "hysteresis": 50,
+    "smoothing_window": 5
+}
