@@ -142,9 +142,8 @@ public class GroqAudioClient
             HttpResponseMessage? response = null;
             try
             {
-                using var form = new MultipartFormDataContent();
-                using var fileStream = File.OpenRead(audioPath);
-                var fileContent = new StreamContent(fileStream);
+                var fileBytes = await System.IO.File.ReadAllBytesAsync(audioPath, ct);
+                using var fileContent = new ByteArrayContent(fileBytes);
 
                 var ext = Path.GetExtension(audioPath).ToLowerInvariant();
                 var mimeType = ext switch
@@ -156,6 +155,8 @@ public class GroqAudioClient
                     _ => "audio/mpeg"
                 };
                 fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mimeType);
+
+                using var form = new MultipartFormDataContent();
                 form.Add(fileContent, "file", Path.GetFileName(audioPath));
                 
                 if (!string.IsNullOrEmpty(language) && language != "auto")
@@ -185,12 +186,12 @@ public class GroqAudioClient
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogError("Groq returned {StatusCode}: {ErrorBody}", (int)response.StatusCode, responseBody);
-                    response.EnsureSuccessStatusCode();
+                    throw new HttpRequestException($"Groq {response.StatusCode}: {responseBody}");
                 }
                 
                 return responseBody.Trim();
             }
-            catch (Exception ex) when (attempt < maxRetries - 1)
+            catch (Exception ex) when (attempt < maxRetries - 1 && ex is not HttpRequestException)
             {
                 var backoff = 5 * (attempt + 1);
                 _logger.LogWarning(ex, "Chunk transcription attempt {Attempt}/{MaxRetries} failed, retrying in {Backoff}s...", attempt + 1, maxRetries, backoff);

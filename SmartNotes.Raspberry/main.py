@@ -18,7 +18,6 @@ import numpy as np
 import pyaudio
 import requests
 from gpiozero import AngularServo, Button
-from gpiozero.pins.pigpio import PiGPIOFactory
 
 # ──────────────────────── CONFIGURACIÓ ────────────────────────
 
@@ -171,14 +170,12 @@ class SmoothServo:
     """Control del servo amb moviment suau i desacoblament per evitar tremolors."""
 
     def __init__(self, pin, min_pulse, max_pulse, max_angle, step_deg, min_interval):
-        factory = PiGPIOFactory()
         self.servo = AngularServo(
             pin,
             min_angle=-max_angle,
             max_angle=max_angle,
             min_pulse_width=min_pulse,
             max_pulse_width=max_pulse,
-            pin_factory=factory,
         )
         self.max_angle = max_angle
         self.step = step_deg
@@ -209,7 +206,7 @@ class SmoothServo:
         if now - self.last_move_time < self.min_interval:
             return False
 
-        new_target = self.target_angle + (self.step * direction)
+        new_target = self.target_angle - (self.step * direction)
         new_target = max(-self.max_angle, min(self.max_angle, new_target))
 
         if new_target == self.target_angle:
@@ -294,7 +291,13 @@ class AudioRecorder:
     def read_chunk(self):
         if not self.is_recording or self.stream is None:
             return None
-        data = self.stream.read(self.chunk, exception_on_overflow=False)
+        try:
+            data = self.stream.read(self.chunk, exception_on_overflow=False)
+        except OSError as e:
+            print(f"  ⚠ Error de lectura d'àudio: {e}. Reobrint stream...")
+            self.stop()
+            self.start()
+            return None
         self.frames.append(data)
         return data
 
@@ -394,7 +397,7 @@ def main():
     servo.calibrate()
 
     # Estat
-    state = State.DISMARED
+    state = State.DISARMED
     current_recording_path = None
     btn_lock = False
     lock_time = 0
@@ -409,18 +412,18 @@ def main():
         btn_lock = True
         lock_time = now
 
-        if state == State.DISMARED:
+        if state == State.DISARMED:
             state = State.ARMED
             print("\n🟢 SISTEMA ENCÉS")
             _play_sound("engegat")
 
         elif state == State.ARMED:
-            state = State.DISMARED
+            state = State.DISARMED
             print("\n🔴 SISTEMA APAGAT")
             _play_sound("apagat")
 
         elif state == State.RECORDING:
-            state = State.DISMARED
+            state = State.DISARMED
             print("\n⏹ Aturant gravació (sense desar)...")
             recorder.stop()
             current_recording_path = None
@@ -472,7 +475,7 @@ def main():
     print("\n✅ Sistema llest. Prem el botó d'encesa per començar.\n")
 
     state_map_str = {
-        State.DISMARED: "APAGAT",
+        State.DISARMED: "APAGAT",
         State.ARMED: "ENCÉS",
         State.RECORDING: "GRAVANT",
     }
@@ -493,7 +496,7 @@ def main():
                             print(f"    Servo -> {side} ({servo.target_angle:.0f}º)")
                 servo.update()
 
-            elif state == State.ARMED or state == State.DISMARED:
+            elif state == State.ARMED or state == State.DISARMED:
                 servo.update()
 
             # Mostrar estat cada 5 segons

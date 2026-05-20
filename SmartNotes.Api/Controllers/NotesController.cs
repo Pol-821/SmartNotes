@@ -141,23 +141,31 @@ namespace SmartNotes.Api.Controllers
             }
 
             // 2. Extreure la durada real
-            int realDurationSeconds;
-            using (var ms = new MemoryStream())
+            int realDurationSeconds = 0;
+            try
             {
-                await audioFile.CopyToAsync(ms);
-                ms.Position = 0;
-                var tempTagFile = Path.GetTempFileName();
-                try
+                using (var ms = new MemoryStream())
                 {
-                    await System.IO.File.WriteAllBytesAsync(tempTagFile, ms.ToArray());
-                    var tfile = TagLib.File.Create(tempTagFile);
-                    realDurationSeconds = (int)tfile.Properties.Duration.TotalSeconds;
+                    await audioFile.CopyToAsync(ms);
+                    ms.Position = 0;
+                    var tempTagFile = Path.GetTempFileName();
+                    try
+                    {
+                        await System.IO.File.WriteAllBytesAsync(tempTagFile, ms.ToArray());
+                        var tfile = TagLib.File.Create(tempTagFile);
+                        realDurationSeconds = (int)tfile.Properties.Duration.TotalSeconds;
+                    }
+                    finally
+                    {
+                        if (System.IO.File.Exists(tempTagFile))
+                            System.IO.File.Delete(tempTagFile);
+                    }
                 }
-                finally
-                {
-                    if (System.IO.File.Exists(tempTagFile))
-                        System.IO.File.Delete(tempTagFile);
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[NOTES] Error llegint durada amb TagLib: {ex.Message}. Usant durada per defecte de 10 minuts.");
+                realDurationSeconds = 600;
             }
 
             // 3. Comprovar si té prou minuts
