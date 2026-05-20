@@ -25,12 +25,15 @@ export default function RaspberryScreen() {
   const fetchDevices = async () => {
     setIsLoading(true);
     try {
-      const [devicesRes, adminRes] = await Promise.all([
-        api.get('/raspberry/my-devices'),
-        api.get('/raspberry/is-admin')
-      ]);
+      const devicesRes = await api.get('/raspberry/my-devices');
       setDevices(devicesRes.data);
-      setIsAdmin(adminRes.data.isAdmin);
+
+      try {
+        const adminRes = await api.get('/raspberry/is-admin');
+        setIsAdmin(adminRes.data.isAdmin);
+      } catch {
+        // Si falla la comprovació d'admin, no bloquegem el llistat
+      }
     } catch (error) {
       toast.error("No s'han pogut carregar les dades");
     } finally {

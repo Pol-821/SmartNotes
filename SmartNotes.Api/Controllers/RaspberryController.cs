@@ -15,6 +15,7 @@ public class RaspberryController : ControllerBase
     private readonly SmartNotesDbContext _db;
     private readonly IConfiguration _config;
     private const string AdminEmail = "polmirfer@gmail.com";
+    private static readonly StringComparison AdminEmailComparison = StringComparison.OrdinalIgnoreCase;
 
     public RaspberryController(SmartNotesDbContext db, IConfiguration config)
     {
@@ -72,7 +73,7 @@ public class RaspberryController : ControllerBase
     {
         var userId = GetUserId();
         var user = _db.Users.Find(userId);
-        return Ok(new { isAdmin = user?.Email == AdminEmail });
+        return Ok(new { isAdmin = string.Equals(user?.Email, AdminEmail, StringComparison.OrdinalIgnoreCase) });
     }
 
     [HttpPost("provision")]
@@ -81,7 +82,7 @@ public class RaspberryController : ControllerBase
     {
         var userId = GetUserId();
         var user = _db.Users.Find(userId);
-        if (user == null || user.Email != AdminEmail)
+        if (user == null || !string.Equals(user.Email, AdminEmail, StringComparison.OrdinalIgnoreCase))
             return Forbid();
 
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
