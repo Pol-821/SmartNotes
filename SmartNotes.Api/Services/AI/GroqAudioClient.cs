@@ -167,6 +167,7 @@ public class GroqAudioClient
                 form.Add(new StringContent("text"), "response_format");
 
                 response = await _http.PostAsync(Endpoint, form, ct);
+                var responseBody = await response.Content.ReadAsStringAsync(ct);
                 
                 if ((int)response.StatusCode == 429)
                 {
@@ -181,8 +182,12 @@ public class GroqAudioClient
                     continue;
                 }
                 
-                response.EnsureSuccessStatusCode();
-                var responseBody = await response.Content.ReadAsStringAsync(ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Groq returned {StatusCode}: {ErrorBody}", (int)response.StatusCode, responseBody);
+                    response.EnsureSuccessStatusCode();
+                }
+                
                 return responseBody.Trim();
             }
             catch (Exception ex) when (attempt < maxRetries - 1)
