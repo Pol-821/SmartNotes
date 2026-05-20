@@ -14,6 +14,7 @@ public class RaspberryController : ControllerBase
 {
     private readonly SmartNotesDbContext _db;
     private readonly IConfiguration _config;
+    private const string AdminEmail = "polmirfer@gmail.com";
 
     public RaspberryController(SmartNotesDbContext db, IConfiguration config)
     {
@@ -65,10 +66,24 @@ public class RaspberryController : ControllerBase
         return Ok("Dispositiu desvinculat");
     }
 
+    [HttpGet("is-admin")]
+    [Authorize]
+    public IActionResult IsAdmin()
+    {
+        var userId = GetUserId();
+        var user = _db.Users.Find(userId);
+        return Ok(new { isAdmin = user?.Email == AdminEmail });
+    }
+
     [HttpPost("provision")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public IActionResult ProvisionNewDevice()
     {
+        var userId = GetUserId();
+        var user = _db.Users.Find(userId);
+        if (user == null || user.Email != AdminEmail)
+            return Forbid();
+
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         var random = new Random();
         var randomPart = new string(Enumerable.Repeat(chars, 4).Select(s => s[random.Next(s.Length)]).ToArray());

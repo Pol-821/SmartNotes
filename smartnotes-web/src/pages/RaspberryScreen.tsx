@@ -6,41 +6,37 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
-// POSA EL TEU CORREU AQUÍ PER ACTIVAR EL MODE SUPERADMIN
-const ADMIN_EMAIL = "polmirfer@gmail.com"; 
-
 export default function RaspberryScreen() {
   const [devices, setDevices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [serialNumber, setSerialNumber] = useState('');
   const [isLinking, setIsLinking] = useState(false);
-
-  // Comprovem si ets el SuperAdmin
-  const currentUserEmail = localStorage.getItem('email');
-  const isAdmin = currentUserEmail === ADMIN_EMAIL;
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Modals
   const [targetSerial, setTargetSerial] = useState<string | null>(null);
   const [isUnlinkModalOpen, setIsUnlinkModalOpen] = useState(false);
-  
-  // Modal de Fabricació (Només per al SuperAdmin)
   const [newDeviceData, setNewDeviceData] = useState<{ serial: string } | null>(null);
-
-  const fetchDevices = async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get('/raspberry/my-devices');
-      setDevices(response.data);
-    } catch (error) {
-      toast.error("No s'han pogut carregar les Raspberrys");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchDevices();
   }, []);
+
+  const fetchDevices = async () => {
+    setIsLoading(true);
+    try {
+      const [devicesRes, adminRes] = await Promise.all([
+        api.get('/raspberry/my-devices'),
+        api.get('/raspberry/is-admin')
+      ]);
+      setDevices(devicesRes.data);
+      setIsAdmin(adminRes.data.isAdmin);
+    } catch (error) {
+      toast.error("No s'han pogut carregar les dades");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // 1. Vincular
   const handleLinkDevice = async (e: React.FormEvent) => {
