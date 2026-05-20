@@ -133,37 +133,44 @@ namespace SmartNotes.Api.Controllers
             };
 
             string s3Key;
+            byte[] audioBytes;
             using (var ms = new MemoryStream())
             {
                 await audioFile.CopyToAsync(ms);
+                audioBytes = ms.ToArray();
                 ms.Position = 0;
                 s3Key = await _r2.UploadAsync(ms, audioFile.FileName, mimeType);
             }
 
             // 2. Extreure la durada real amb ffprobe
             int realDurationSeconds = 0;
-            var tempAudioPath = Path.GetTempFileName() + ext;
             try
             {
-                using (var fs = new FileStream(tempAudioPath, FileMode.Create))
+                var tempAudioPath = Path.GetTempFileName() + ext;
+                try
                 {
-                    await audioFile.CopyToAsync(fs);
+                    await System.IO.File.WriteAllBytesAsync(tempAudioPath, audioBytes);
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "ffprobe",
+                        Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{tempAudioPath}\"",
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    var proc = new System.Diagnostics.Process { StartInfo = psi };
+                    proc.Start();
+                    var output = await proc.StandardOutput.ReadToEndAsync();
+                    await proc.WaitForExitAsync();
+                    if (double.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var dur))
+                    {
+                        realDurationSeconds = (int)Math.Ceiling(dur);
+                    }
                 }
-                var psi = new System.Diagnostics.ProcessStartInfo
+                finally
                 {
-                    FileName = "ffprobe",
-                    Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{tempAudioPath}\"",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                var proc = new System.Diagnostics.Process { StartInfo = psi };
-                proc.Start();
-                var output = await proc.StandardOutput.ReadToEndAsync();
-                await proc.WaitForExitAsync();
-                if (double.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var dur))
-                {
-                    realDurationSeconds = (int)Math.Ceiling(dur);
+                    if (System.IO.File.Exists(tempAudioPath))
+                        System.IO.File.Delete(tempAudioPath);
                 }
             }
             catch (Exception ex)
@@ -171,16 +178,11 @@ namespace SmartNotes.Api.Controllers
                 Console.WriteLine($"[NOTES] Error obtenint durada: {ex.Message}");
                 realDurationSeconds = 0;
             }
-            finally
-            {
-                if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
-            }
 
             if (realDurationSeconds <= 0)
             {
                 // Fallback: estimar per mida (assumint ~64kbps per veu)
-                var fileSizeBytes = audioFile.Length;
-                realDurationSeconds = (int)(fileSizeBytes / 8000.0);
+                realDurationSeconds = (int)(audioFile.Length / 8000.0);
                 Console.WriteLine($"[NOTES] Durada estimada per mida: {realDurationSeconds}s");
             }
 
