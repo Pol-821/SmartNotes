@@ -1,6 +1,6 @@
 {
     "serial_number": "RPI-XXXX-XXXX",
-    "api_base_url": "https://smartnotes-api-971k.onrender.com/api",
+    "api_base_url": "http://localhost:5065/api",
     "raspberry_api_key": "",
     "servo_pin": 12,
     "btn_power_pin": 17,
