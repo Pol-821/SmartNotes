@@ -135,10 +135,14 @@ public class AudioPreprocessor
         
         if (File.Exists(samplePath)) File.Delete(samplePath);
 
+        double duration = await GetAudioDurationSecondsAsync(inputPath, ct);
+        double startTime = duration < 60 ? 0 : 60;
+        double sampleDuration = Math.Min(30, duration);
+
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-nostdin -y -ss 00:01:00 -t 30 -i \"{inputPath}\" -c copy \"{samplePath}\"",
+            Arguments = $"-nostdin -y -ss {startTime} -t {sampleDuration} -i \"{inputPath}\" -c copy \"{samplePath}\"",
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true

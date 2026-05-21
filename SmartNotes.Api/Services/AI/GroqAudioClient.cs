@@ -97,7 +97,7 @@ public class GroqAudioClient
             return "";
 
         var sampleDir = Path.GetDirectoryName(audioPath) ?? Path.GetTempPath();
-        var samplePath = Path.Combine(sampleDir, "lang_sample.mp3");
+        var samplePath = Path.Combine(sampleDir, "lang_sample.wav");
 
         if (File.Exists(samplePath)) File.Delete(samplePath);
 
@@ -106,7 +106,7 @@ public class GroqAudioClient
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-nostdin -y -i \"{audioPath}\" -t 30 -ar 16000 -ac 1 \"{samplePath}\"",
+                Arguments = $"-nostdin -y -i \"{audioPath}\" -t 30 -ar 16000 -ac 1 -c:a pcm_s16le \"{samplePath}\"",
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
