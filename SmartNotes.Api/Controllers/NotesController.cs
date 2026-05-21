@@ -272,25 +272,35 @@ namespace SmartNotes.Api.Controllers
                 return Forbid("Aquest àudio no és teu.");
             }
 
+            if (string.IsNullOrEmpty(note.JobId))
+                return NotFound("Aquest apunt no té àudio associat.");
+
             // Buscar el TranscriptionRecord per obtenir la clau R2
             var record = await _context.Transcriptions
-                .FirstOrDefaultAsync(t => t.JobId == note.JobId && t.UserId == currentUserId);
+                .FirstOrDefaultAsync(t => t.JobId == note.JobId);
 
-            if (record == null || string.IsNullOrEmpty(record.EnhancedAudioPath))
+            if (record != null && !string.IsNullOrEmpty(record.EnhancedAudioPath))
             {
-                // Fallback: intentar local (per si hi ha fitxers antics)
-                var filePath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", $"Professor_{note.UserId}", $"audio_{note.JobId}.mp3");
-                if (System.IO.File.Exists(filePath))
+                try
                 {
-                    var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                    return File(stream, "audio/mpeg", enableRangeProcessing: true);
+                    var r2Stream = await _r2.DownloadAsync(record.EnhancedAudioPath);
+                    return File(r2Stream, "audio/mpeg", enableRangeProcessing: true);
                 }
-                return NotFound("L'arxiu d'àudio no està disponible.");
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AUDIO] Error descarregant de R2: {ex.Message}");
+                }
             }
 
-            // Retornar URL prefirmada de R2
-            var presignedUrl = _r2.GeneratePresignedUrl(record.EnhancedAudioPath, TimeSpan.FromHours(1));
-            return Redirect(presignedUrl);
+            // Fallback: intentar local (per si hi ha fitxers antics)
+            var filePath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", $"Professor_{note.UserId}", $"audio_{note.JobId}.mp3");
+            if (System.IO.File.Exists(filePath))
+            {
+                var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                return File(stream, "audio/mpeg", enableRangeProcessing: true);
+            }
+
+            return NotFound("L'arxiu d'àudio no està disponible.");
         }
     }
 }
