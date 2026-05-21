@@ -262,33 +262,35 @@ namespace SmartNotes.Api.Controllers
         [Authorize]
         public async Task<IActionResult> GetAudioFile(int id)
         {
-            var currentUserId = GetUserId(); // El que demana l'àudio (profe o alumne)
+            var currentUserId = GetUserId();
 
-            // 1. Busquem l'apunt a la base de dades
             var note = await _context.Notes.FindAsync(id);
             if (note == null) return NotFound("Apunt no trobat.");
 
-            // 2. Mesures de seguretat
-            // Si ets professor, ha de ser teu.
-            // Si ets alumne, hauries de passar per la comprovació de matrícules (ho ometo per brevetat, però pots afegir-hi l'if que vam fer abans).
             if (User.FindFirst(ClaimTypes.Role)?.Value != "Alumne" && note.UserId != currentUserId) 
             {
                 return Forbid("Aquest àudio no és teu.");
             }
 
-            // 3. Construïm la ruta intel·ligent a la carpeta del professor
-            // Com que l'arxiu FFMPEG surt en .wav, el busquem així.
-            var filePath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", $"Professor_{note.UserId}", $"audio_{note.JobId}.mp3");
+            // Buscar el TranscriptionRecord per obtenir la clau R2
+            var record = await _context.Transcriptions
+                .FirstOrDefaultAsync(t => t.JobId == note.JobId && t.UserId == currentUserId);
 
-            if (!System.IO.File.Exists(filePath))
+            if (record == null || string.IsNullOrEmpty(record.EnhancedAudioPath))
             {
-                return NotFound("L'arxiu d'àudio físic no es troba al servidor."); 
+                // Fallback: intentar local (per si hi ha fitxers antics)
+                var filePath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", $"Professor_{note.UserId}", $"audio_{note.JobId}.mp3");
+                if (System.IO.File.Exists(filePath))
+                {
+                    var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                    return File(stream, "audio/mpeg", enableRangeProcessing: true);
+                }
+                return NotFound("L'arxiu d'àudio no està disponible.");
             }
 
-            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-            
-            // Retornem el fitxer permetent "avançar i retrocedir" (Range Processing)
-            return File(stream, "audio/wav", enableRangeProcessing: true);
+            // Retornar URL prefirmada de R2
+            var presignedUrl = _r2.GeneratePresignedUrl(record.EnhancedAudioPath, TimeSpan.FromHours(1));
+            return Redirect(presignedUrl);
         }
     }
 }
