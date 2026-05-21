@@ -353,7 +353,7 @@ class SmartNotesAPI:
             return False
         try:
             with open(wav_path, "rb") as f:
-                files = {"audioFile": ("audio.wav", f, "audio/wav")}
+                files = {"file": ("audio.wav", f, "audio/wav")}
                 resp = requests.post(self.upload_url, headers=self.headers, files=files, timeout=120)
             if resp.ok:
                 print(f"  ✅ Àudio pujat correctament (jobId: {resp.json().get('jobId', '?')})")
