@@ -52,6 +52,8 @@ DIFF_THRESHOLD = cfg["diff_threshold"]
 HYSTERESIS = cfg["hysteresis"]
 SMOOTHING_WINDOW = cfg["smoothing_window"]
 
+AUDIO_OUTPUT_DEVICE = cfg.get("audio_output_device", "")
+
 SOUND_FILES = {
     "engegat": "engegat.wav",
     "apagat": "apagat.wav",
@@ -99,10 +101,10 @@ def _play_sound(name):
         print(f"  ⚠ So '{name}' no trobat, saltant")
         return
     try:
-        subprocess.run(
-            ["aplay", str(wav_path)],
-            capture_output=True, check=False
-        )
+        cmd = ["aplay", str(wav_path)]
+        if AUDIO_OUTPUT_DEVICE:
+            cmd = ["aplay", "-D", AUDIO_OUTPUT_DEVICE, str(wav_path)]
+        subprocess.run(cmd, capture_output=True, check=False)
     except FileNotFoundError:
         print("  ⚠ aplay no disponible, saltant so")
 
@@ -386,6 +388,20 @@ def main():
     # Preparar sons
     print("\n🔊 Preparant sons...")
     ensure_sounds()
+
+    # Llistar dispositius de reproducció disponibles
+    print("\n🔊 Dispositius de reproducció disponibles:")
+    try:
+        result = subprocess.run(["aplay", "-l"], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if "card" in line.lower():
+                print(f"  {line.strip()}")
+    except FileNotFoundError:
+        print("  (aplay no disponible)")
+    if AUDIO_OUTPUT_DEVICE:
+        print(f"  ▶ Usant: {AUDIO_OUTPUT_DEVICE}")
+    else:
+        print(f"  ▶ Usant: dispositiu per defecte")
 
     # Inicialitzar components
     print("\n🔧 Inicialitzant components...")

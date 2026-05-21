@@ -16,5 +16,6 @@
     "volume_threshold": 300,
     "diff_threshold": 150,
     "hysteresis": 50,
-    "smoothing_window": 5
+    "smoothing_window": 5,
+    "audio_output_device": ""
 }
