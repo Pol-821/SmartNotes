@@ -70,7 +70,7 @@ class State(Enum):
 
 # ──────────────────────── SONS ────────────────────────
 
-def _generate_beep_wav(path, freq=880, duration=0.15, volume=0.5):
+def _generate_beep_wav(path, freq=880, duration=0.15, volume=0.9):
     """Genera un to senzill WAV com a fallback."""
     sample_rate = 22050
     n_samples = int(sample_rate * duration)
@@ -296,12 +296,23 @@ class AudioRecorder:
         try:
             data = self.stream.read(self.chunk, exception_on_overflow=False)
         except OSError as e:
+            if not self.is_recording:
+                return None
             print(f"  ⚠ Error de lectura d'àudio: {e}. Reobrint stream...")
-            self.stop()
-            self.start()
+            self._hard_recover()
             return None
         self.frames.append(data)
         return data
+
+    def _hard_recover(self):
+        old_frames = self.frames
+        self.stop()
+        self.frames = old_frames
+        if self.is_recording:
+            try:
+                self.start()
+            except OSError:
+                self.is_recording = False
 
     def stop(self):
         self.is_recording = False
