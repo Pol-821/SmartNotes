@@ -35,7 +35,7 @@ export default function LoginScreen() {
 
     try {
       const response = await api.post('/auth/login', {
-        username: loginId, 
+        identifier: loginId, 
         password: password
       });
       
