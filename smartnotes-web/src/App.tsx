@@ -1,12 +1,10 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-import { useEffect } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { UserProvider } from '@/contexts/UserContext';
 import { setNavigateFn } from '@/services/api';
-import { useNavigate } from 'react-router-dom';
 import { getToken, isTokenExpired, clearAuth } from '@/lib/auth';
 import { FullPageLoader } from '@/components/ui/spinner';
 
@@ -44,37 +42,43 @@ const StudentLayout = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-function App() {
+function AppContent() {
   const navigate = useNavigate();
   useEffect(() => { setNavigateFn(navigate); }, [navigate]);
   return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ErrorBoundary>
+    <React.Suspense fallback={<FullPageLoader text="Carregant..." />}>
+    <UserProvider>
+    <Routes>
+      <Route path="/" element={<LandingScreen />} />
+      <Route path="/login" element={<LoginScreen />} />
+      <Route path="/register" element={<RegisterScreen />} />
+      <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+      <Route path="/pricing" element={<PricingScreen />} />
+      <Route path="/classrooms/:id" element={<ProtectedRoute><ClassroomScreen /></ProtectedRoute>} />
+      <Route path="/student" element={<StudentLayout><StudentDashboard /></StudentLayout>} />
+      <Route path="/student/class/:id" element={<StudentLayout><StudentClassroomScreen /></StudentLayout>} />
+      <Route path="/student/note/:id" element={<StudentLayout><StudentNoteScreen /></StudentLayout>} />
+      <Route path="/raspberry" element={<ProtectedRoute><RaspberryScreen /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
+      <Route path="/notes" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
+      <Route path="/notes/:id" element={<ProtectedRoute><NoteScreen /></ProtectedRoute>} />
+      <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+    </UserProvider>
+    </React.Suspense>
+    <Toaster position="bottom-right" richColors/>
+    </ErrorBoundary>
+    </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
     <BrowserRouter>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <ErrorBoundary>
-      <React.Suspense fallback={<FullPageLoader text="Carregant..." />}>
-      <UserProvider>
-      <Routes>
-        <Route path="/" element={<LandingScreen />} />
-        <Route path="/login" element={<LoginScreen />} />
-        <Route path="/register" element={<RegisterScreen />} />
-        <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
-        <Route path="/pricing" element={<PricingScreen />} />
-        <Route path="/classrooms/:id" element={<ProtectedRoute><ClassroomScreen /></ProtectedRoute>} />
-        <Route path="/student" element={<StudentLayout><StudentDashboard /></StudentLayout>} />
-        <Route path="/student/class/:id" element={<StudentLayout><StudentClassroomScreen /></StudentLayout>} />
-        <Route path="/student/note/:id" element={<StudentLayout><StudentNoteScreen /></StudentLayout>} />
-        <Route path="/raspberry" element={<ProtectedRoute><RaspberryScreen /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
-        <Route path="/notes" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
-        <Route path="/notes/:id" element={<ProtectedRoute><NoteScreen /></ProtectedRoute>} />
-        <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      </UserProvider>
-      </React.Suspense>
-      <Toaster position="bottom-right" richColors/>
-      </ErrorBoundary>
-      </ThemeProvider>
+      <AppContent />
     </BrowserRouter>
   );
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { api } from '@/services/api';
+import { getToken, isTokenExpired } from '@/lib/auth';
 import type { UserProfile } from '@/types/api';
 
 interface UserContextValue {
@@ -29,7 +30,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    const token = getToken();
+    if (!token || isTokenExpired(token)) {
+      setLoading(false);
+      return;
+    }
+    refresh();
+  }, []);
 
   return (
     <UserContext.Provider value={{ user, loading, refresh }}>
