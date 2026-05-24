@@ -13,7 +13,7 @@ namespace SmartNotes.Api.Services
             _config = config;
         }
 
-        public async Task SendEmailAsync(string toEmail, string subject, string htmlBody)
+        public async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct = default)
         {
             // Agafem les dades del teu appsettings.json
             var host = _config["SmtpSettings:Host"];
@@ -23,23 +23,23 @@ namespace SmartNotes.Api.Services
             var fromName = _config["SmtpSettings:FromName"];
             var fromEmail = _config["SmtpSettings:FromEmail"];
 
-            var client = new SmtpClient(host, port)
+            using var client = new SmtpClient(host, port)
             {
                 Credentials = new NetworkCredential(user, pass),
-                EnableSsl = true // Utilitzem connexió segura
+                EnableSsl = true
             };
 
-            var mailMessage = new MailMessage
+            using var mailMessage = new MailMessage
             {
                 From = new MailAddress(fromEmail!, fromName),
                 Subject = subject,
                 Body = htmlBody,
-                IsBodyHtml = true // Permet enviar el correu amb disseny (negretes, enllaços, botons)
+                IsBodyHtml = true
             };
 
             mailMessage.To.Add(toEmail);
 
-            await client.SendMailAsync(mailMessage);
+            await client.SendMailAsync(mailMessage, ct);
         }
     }
 }

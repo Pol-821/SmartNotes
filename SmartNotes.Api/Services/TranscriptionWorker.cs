@@ -6,6 +6,7 @@ using SmartNotes.Api.Services.AI;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 public class TranscriptionWorker : BackgroundService
 {
@@ -16,6 +17,7 @@ public class TranscriptionWorker : BackgroundService
     private readonly SmartNotesEngine _smartNotesEngine;
     private readonly AudioPreprocessor _audioPreprocessor;
     private readonly R2Service _r2;
+    private readonly ILogger<TranscriptionWorker> _logger;
 
     public TranscriptionWorker(
         TranscriptionQueue queue,
@@ -24,7 +26,8 @@ public class TranscriptionWorker : BackgroundService
         IServiceScopeFactory scopeFactory,
         SmartNotesEngine smartNotesEngine,
         AudioPreprocessor audioPreprocessor,
-        R2Service r2
+        R2Service r2,
+        ILogger<TranscriptionWorker> logger
     )
     {
         _queue = queue;
@@ -34,6 +37,7 @@ public class TranscriptionWorker : BackgroundService
         _smartNotesEngine = smartNotesEngine;
         _audioPreprocessor = audioPreprocessor;
         _r2 = r2;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -69,23 +73,23 @@ public class TranscriptionWorker : BackgroundService
                 // --- EL BYPASS DEL PLA DE RESCAT ---
                 if (job.IsRetry && !string.IsNullOrEmpty(job.ForcedLanguage))
                 {
-                    Console.WriteLine($"[SISTEMA] Iniciant REINTENT. Saltem la neteja d'àudio i el Jutge.");
+                    _logger.LogInformation("Iniciant REINTENT. Saltem la neteja d'àudio i el Jutge.");
                     enhancedLocalPath = localAudioPath;
                     finalLanguageToUse = job.ForcedLanguage;
-                    Console.WriteLine($"[ÀRBITRE C#] Forçant l'idioma manualment a: '{finalLanguageToUse}'");
+                    _logger.LogInformation("Forçant l'idioma manualment a: '{Language}'", finalLanguageToUse);
                     job.ProgressPercentage = 30;
                 }
                 else
                 {
                     // --- FLUX NORMAL ---
-                    Console.WriteLine($"[AUDIO] Iniciant neteja i realçament de veu...");
+                    _logger.LogInformation("Iniciant neteja i realçament de veu...");
                     enhancedLocalPath = await _audioPreprocessor.EnhanceAudioWithProgressAsync(localAudioPath, job, job.Cancellation.Token);
 
                     job.ProgressPercentage = 25;
                     job.ProgressMessage = "Extreient mostra d'idioma...";
                     _store.Update(job);
 
-                    Console.WriteLine($"[ANALISTA] Extreient fragment de 30 segons per detectar l'idioma...");
+                    _logger.LogInformation("Extreient fragment de 30 segons per detectar l'idioma...");
                     job.Status = TranscriptionStatus.DetectingLanguage;
                     job.ProgressMessage = "Detectant idioma de la classe...";
                     job.ProgressPercentage = 30;
@@ -93,10 +97,10 @@ public class TranscriptionWorker : BackgroundService
 
                     string samplePath = await _audioPreprocessor.ExtractLanguageSampleAsync(enhancedLocalPath, job.Cancellation.Token);
 
-                    Console.WriteLine($"[ANALISTA] L'IA 'Large-v3' està analitzant l'idioma del fragment...");
+                    _logger.LogInformation("L'IA 'Large-v3' està analitzant l'idioma del fragment...");
                     string detectedLang = await _whisper.DetectLanguageAsync(samplePath, job.Cancellation.Token);
 
-                    Console.WriteLine($"[ANALISTA] L'IA creu que l'idioma és: '{detectedLang}'");
+                    _logger.LogInformation("L'IA creu que l'idioma és: '{DetectedLang}'", detectedLang);
                     job.ProgressMessage = $"Idioma detectat: {detectedLang}";
                     job.ProgressPercentage = 35;
                     _store.Update(job);
@@ -122,19 +126,19 @@ public class TranscriptionWorker : BackgroundService
 
                     if (!string.IsNullOrEmpty(detectedLang) && idiomesUsuari.Contains(detectedLang))
                     {
-                        Console.WriteLine($"[ÀRBITRE C#] L'idioma detectat ('{detectedLang}') és vàlid per aquest professor. L'aplicarem.");
+                        _logger.LogInformation("L'idioma detectat ('{DetectedLang}') és vàlid per aquest professor. L'aplicarem.", detectedLang);
                         finalLanguageToUse = detectedLang;
                     }
                     else
                     {
-                        Console.WriteLine($"[ÀRBITRE C#] Avís: L'idioma detectat ('{detectedLang}') no està a la llista del professor o no s'ha detectat clarament. Forçarem el principal: '{finalLanguageToUse}'.");
+                        _logger.LogWarning("L'idioma detectat ('{DetectedLang}') no està a la llista del professor o no s'ha detectat clarament. Forçarem el principal: '{FinalLanguage}'.", detectedLang, finalLanguageToUse);
                     }
 
                     if (File.Exists(samplePath)) File.Delete(samplePath);
                 }
 
                 // --- FASE 1: TRANSCRIPCIÓ ---
-                Console.WriteLine($"[WHISPER] Iniciant la transcripció del fitxer en idioma '{finalLanguageToUse}'...");
+                _logger.LogInformation("Iniciant la transcripció del fitxer en idioma '{Language}'...", finalLanguageToUse);
                 job.Status = TranscriptionStatus.Transcribing;
                 job.ProgressMessage = $"Transcrivint àudio ({job.AudioDuration}) amb Whisper...";
                 job.ProgressPercentage = 40;
@@ -143,7 +147,7 @@ public class TranscriptionWorker : BackgroundService
                 var result = await _whisper.TranscribeWithProgressAsync(enhancedLocalPath, job, finalLanguageToUse, job.Cancellation.Token, totalDuration);
                 job.Result = CleanTranscript(result);
 
-                Console.WriteLine($"[SISTEMA] Transcripció acabada ({job.Result.Length} caràcters). Iniciant resum amb Groq...");
+                _logger.LogInformation("Transcripció acabada ({Length} caràcters). Iniciant resum amb Groq...", job.Result.Length);
                 job.ProgressMessage = "Transcripció completada. Generant resum...";
                 job.ProgressPercentage = 70;
                 _store.Update(job);
@@ -154,7 +158,7 @@ public class TranscriptionWorker : BackgroundService
                 job.ProgressPercentage = 75;
                 _store.Update(job);
 
-                var summaryObject = await _smartNotesEngine.SummarizeWithProgressAsync(job.Result, finalLanguageToUse, job, _store, totalDuration);
+                var summaryObject = await _smartNotesEngine.SummarizeWithProgressAsync(job.Result, finalLanguageToUse, job, _store, totalDuration, job.Cancellation.Token);
                 job.Summary = JsonSerializer.Serialize(summaryObject);
                 job.Status = TranscriptionStatus.Done;
                 job.ProgressMessage = "Procés completat!";
@@ -166,13 +170,13 @@ public class TranscriptionWorker : BackgroundService
                 {
                     using var fs = new FileStream(enhancedLocalPath, FileMode.Open, FileAccess.Read);
                     finalR2Key = await _r2.UploadAsync(fs, $"audio_{job.Id}.mp3", "audio/mpeg", job.Cancellation.Token);
-                    Console.WriteLine($"[R2] Àudio millorat pujat a R2 amb key: {finalR2Key}");
+                    _logger.LogInformation("Àudio millorat pujat a R2 amb key: {Key}", finalR2Key);
                 }
                 else if (job.IsRetry && localAudioPath != null && File.Exists(localAudioPath))
                 {
                     using var fs = new FileStream(localAudioPath, FileMode.Open, FileAccess.Read);
                     finalR2Key = await _r2.UploadAsync(fs, $"audio_{job.Id}.mp3", "audio/mpeg", job.Cancellation.Token);
-                    Console.WriteLine($"[R2] Àudio millorat pujat a R2 (retry) amb key: {finalR2Key}");
+                    _logger.LogInformation("Àudio millorat pujat a R2 (retry) amb key: {Key}", finalR2Key);
                 }
 
                 // --- FASE 4: NETEJA DE FITXERS LOCALS ---
@@ -183,7 +187,7 @@ public class TranscriptionWorker : BackgroundService
                 } 
                 catch (Exception ex) 
                 {
-                    Console.WriteLine($"[AVÍS] No s'ha pogut esborrar l'àudio local: {ex.Message}");
+                    _logger.LogWarning(ex, "No s'ha pogut esborrar l'àudio local");
                 }
 
                 // --- FASE 5: GUARDAR A LA BASE DE DADES ---
@@ -215,18 +219,18 @@ public class TranscriptionWorker : BackgroundService
 
                         if (summaryData != null)
                         {
-                            CreateNoteFromSummary(db, summaryData, job);
+                            await CreateNoteFromSummary(db, summaryData, job);
                         }
                         else
                         {
-                            Console.WriteLine("[SISTEMA] Resum no disponible. Creant nota amb transcripció pura.");
-                            CreateNoteFromTranscript(db, job);
+                            _logger.LogWarning("Resum no disponible. Creant nota amb transcripció pura.");
+                            await CreateNoteFromTranscript(db, job);
                         }
                     }
                     else
                     {
-                        Console.WriteLine("[SISTEMA] No hi ha resum. Creant nota amb transcripció pura.");
-                        CreateNoteFromTranscript(db, job);
+                        _logger.LogWarning("No hi ha resum. Creant nota amb transcripció pura.");
+                        await CreateNoteFromTranscript(db, job);
                     }
 
                     await db.SaveChangesAsync();
@@ -257,13 +261,13 @@ public class TranscriptionWorker : BackgroundService
                     if (localAudioPath != null && File.Exists(localAudioPath))
                         File.Delete(localAudioPath);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogWarning(ex, "No s'ha pogut esborrar àudio local"); }
                 try
                 {
                     if (enhancedLocalPath != null && enhancedLocalPath != localAudioPath && File.Exists(enhancedLocalPath))
                         File.Delete(enhancedLocalPath);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogWarning(ex, "No s'ha pogut esborrar àudio millorat"); }
                 job?.Dispose();
             }
         }
@@ -299,7 +303,7 @@ public class TranscriptionWorker : BackgroundService
         return finalText;
     }
 
-    private void CreateNoteFromSummary(SmartNotesDbContext db, SmartSummary summary, TranscriptionJob job)
+    private async Task CreateNoteFromSummary(SmartNotesDbContext db, SmartSummary summary, TranscriptionJob job)
     {
         string markdownContent = $"{summary.ResumGeneral}\n\n";
 
@@ -332,13 +336,13 @@ public class TranscriptionWorker : BackgroundService
             }
         }
 
-        var notaExistent = db.Notes.FirstOrDefault(n => n.JobId == job.Id.ToString());
+        var notaExistent = await db.Notes.FirstOrDefaultAsync(n => n.JobId == job.Id.ToString());
         if (notaExistent != null)
         {
             notaExistent.Title = string.IsNullOrEmpty(summary.Titol) ? notaExistent.Title : summary.Titol;
             notaExistent.Content = markdownContent;
             db.Notes.Update(notaExistent);
-            Console.WriteLine($"[SISTEMA] Nota existent '{notaExistent.Id}' actualitzada.");
+            _logger.LogInformation("Nota existent '{NoteId}' actualitzada.", notaExistent.Id);
         }
         else
         {
@@ -351,13 +355,13 @@ public class TranscriptionWorker : BackgroundService
                 CreatedAt = DateTime.UtcNow
             };
             db.Notes.Add(novaNota);
-            Console.WriteLine("[SISTEMA] S'ha creat una nota nova.");
+            _logger.LogInformation("S'ha creat una nota nova.");
         }
     }
 
-    private void CreateNoteFromTranscript(SmartNotesDbContext db, TranscriptionJob job)
+    private async Task CreateNoteFromTranscript(SmartNotesDbContext db, TranscriptionJob job)
     {
-        var notaExistent = db.Notes.FirstOrDefault(n => n.JobId == job.Id.ToString());
+        var notaExistent = await db.Notes.FirstOrDefaultAsync(n => n.JobId == job.Id.ToString());
         if (notaExistent != null)
         {
             notaExistent.Content = job.Result ?? "";

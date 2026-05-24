@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
-import { FileText, Search, Calendar, ChevronRight, ArrowLeft, Loader2, Folder } from 'lucide-react';
+import { FileText, Search, ArrowLeft, Folder } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
+import NoteCard from '@/components/NoteCard';
+import type { Note, Classroom } from '@/types/api';
 
 export default function StudentClassroomScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [notes, setNotes] = useState<any[]>([]);
-  const [classroom, setClassroom] = useState<any>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -51,13 +53,7 @@ export default function StudentClassroomScreen() {
     note.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <FullPageLoader text="Carregant aula..." />;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -107,33 +103,7 @@ export default function StudentClassroomScreen() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredNotes.map((note) => (
-              <Card 
-                key={note.id} 
-                className="group cursor-pointer hover:border-blue-500 hover:shadow-md transition-all duration-200 bg-white flex flex-col border-slate-200"
-                onClick={() => navigate(`/student/note/${note.id}`)}
-              >
-                <div className="p-6 space-y-4 flex-1">
-                  <div className="flex justify-between items-start">
-                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                      <FileText className="h-6 w-6" />
-                    </div>
-                    <ChevronRight className="text-slate-300 group-hover:text-blue-500 transition-colors" />
-                  </div>
-                  
-                  <div>
-                    <h3 className="font-semibold text-lg text-slate-900 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
-                      {note.title || "Sense títol"}
-                    </h3>
-                  </div>
-                </div>
-                
-                <div className="px-6 py-4 border-t border-slate-100 mt-auto bg-slate-50/50">
-                  <div className="flex items-center text-sm text-slate-500">
-                    <Calendar className="h-4 w-4 mr-2 text-slate-400" />
-                    <span>{note.createdAt ? new Date(note.createdAt).toLocaleDateString('ca-ES') : 'Avui'}</span>
-                  </div>
-                </div>
-              </Card>
+              <NoteCard key={note.id} note={note} onClick={() => navigate(`/student/note/${note.id}`)} />
             ))}
           </div>
         )}

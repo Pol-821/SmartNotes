@@ -14,12 +14,12 @@ public class SmartNotesEngine
         _logger = logger;
     }
 
-    public async Task<SmartSummary> SummarizeAsync(string text, string language = "es")
+    public async Task<SmartSummary> SummarizeAsync(string text, string language = "es", CancellationToken ct = default)
     {
-        return await SummarizeWithProgressAsync(text, language, null, null, 0);
+        return await SummarizeWithProgressAsync(text, language, null, null, 0, ct);
     }
 
-    public async Task<SmartSummary> SummarizeWithProgressAsync(string text, string language, TranscriptionJob? job, TranscriptionStore? store, double totalDuration)
+    public async Task<SmartSummary> SummarizeWithProgressAsync(string text, string language, TranscriptionJob? job, TranscriptionStore? store, double totalDuration, CancellationToken ct = default)
     {
         var chunks = SplitText(text, 6000);
         var finalSummary = new SmartSummary();
@@ -30,7 +30,7 @@ public class SmartNotesEngine
 
         for (int i = 0; i < chunks.Count; i++)
         {
-            if (i > 0) await Task.Delay(TimeSpan.FromSeconds(8));
+            if (i > 0) await Task.Delay(TimeSpan.FromSeconds(8), ct);
 
             int percentage = (i * 100) / chunks.Count;
             string barra = new string('█', percentage / 10) + new string('░', 10 - (percentage / 10));
@@ -47,7 +47,7 @@ public class SmartNotesEngine
 
             try
             {
-                var chunkSummary = await ProcessSingleChunkAsync(chunks[i], language);
+                var chunkSummary = await ProcessSingleChunkAsync(chunks[i], language, ct);
                 
                 if (i == 0)
                 {
@@ -80,9 +80,9 @@ public class SmartNotesEngine
         return finalSummary;
     }
 
-    private async Task<SmartSummary> ProcessSingleChunkAsync(string chunkText, string language)
+    private async Task<SmartSummary> ProcessSingleChunkAsync(string chunkText, string language, CancellationToken ct = default)
     {
-        var rawResponse = await _groq.ChatAsync(chunkText, language);
+        var rawResponse = await _groq.ChatAsync(chunkText, language, ct);
 
         if (string.IsNullOrWhiteSpace(rawResponse))
         {

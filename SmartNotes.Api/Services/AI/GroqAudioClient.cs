@@ -9,15 +9,16 @@ public class GroqAudioClient
 {
     private readonly HttpClient _http;
     private readonly ILogger<GroqAudioClient> _logger;
-    private const string Endpoint = "https://api.groq.com/openai/v1/audio/transcriptions";
+    private readonly FfmpegRunner _ffmpeg;
+    private const string Endpoint = "/openai/v1/audio/transcriptions";
     private const long MaxChunkSizeBytes = 18L * 1024 * 1024;
 
-    public GroqAudioClient(string apiKey, ILogger<GroqAudioClient> logger)
+    public GroqAudioClient(HttpClient http, ILogger<GroqAudioClient> logger, FfmpegRunner ffmpeg)
     {
-        _http = new HttpClient();
+        _http = http;
         _http.Timeout = TimeSpan.FromMinutes(5);
-        _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         _logger = logger;
+        _ffmpeg = ffmpeg;
     }
 
     public async Task<string> TranscribeAsync(string audioPath, string language, CancellationToken ct)
@@ -86,7 +87,7 @@ public class GroqAudioClient
             if (Directory.Exists(chunkDir))
             {
                 try { Directory.Delete(chunkDir, true); }
-                catch { }
+                catch (Exception ex) { _logger.LogWarning(ex, "No s'ha pogut esborrar el directori temporal de chunks: {Dir}", chunkDir); }
             }
         }
     }
@@ -103,21 +104,10 @@ public class GroqAudioClient
 
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "ffmpeg",
-                Arguments = $"-nostdin -y -i \"{audioPath}\" -t 30 -ar 16000 -ac 1 -c:a pcm_s16le \"{samplePath}\"",
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var result = await _ffmpeg.RunAsync("ffmpeg",
+                $"-nostdin -y -i \"{audioPath}\" -t 30 -ar 16000 -ac 1 -c:a pcm_s16le \"{samplePath}\"", ct);
 
-            var process = new System.Diagnostics.Process { StartInfo = psi };
-            process.Start();
-            process.StandardError.ReadToEnd();
-            await process.WaitForExitAsync(ct);
-
-            if (process.ExitCode != 0 || !File.Exists(samplePath))
+            if (result.ExitCode != 0 || !File.Exists(samplePath))
                 return "";
 
             var text = await TranscribeSingleFileAsync(samplePath, "auto", ct);
@@ -225,7 +215,7 @@ Text: {text.Substring(0, Math.Min(500, text.Length))}";
 
         try
         {
-            var response = await _http.PostAsJsonAsync("https://api.groq.com/openai/v1/chat/completions", payload, ct);
+            var response = await _http.PostAsJsonAsync("/openai/v1/chat/completions", payload, ct);
             if (!response.IsSuccessStatusCode) return "";
 
             var json = await response.Content.ReadAsStringAsync(ct);
@@ -264,23 +254,7 @@ Text: {text.Substring(0, Math.Min(500, text.Length))}";
 
     private async Task SplitAudioIntoChunksAsync(string audioPath, string outputDir, CancellationToken ct)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            Arguments = $"-nostdin -y -i \"{audioPath}\" -f segment -segment_time 300 -c:a libmp3lame -b:a 128k \"{outputDir}/chunk_%03d.mp3\"",
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = new System.Diagnostics.Process { StartInfo = psi };
-        process.Start();
-        process.StandardError.ReadToEnd();
-        await process.WaitForExitAsync(ct);
-
-        if (process.ExitCode != 0)
-        {
-            throw new Exception($"FFmpeg ha fallat al dividir l'àudio. ExitCode: {process.ExitCode}");
-        }
+        await _ffmpeg.RunAsync("ffmpeg",
+            $"-nostdin -y -i \"{audioPath}\" -f segment -segment_time 300 -c:a libmp3lame -b:a 128k \"{outputDir}/chunk_%03d.mp3\"", ct);
     }
 }

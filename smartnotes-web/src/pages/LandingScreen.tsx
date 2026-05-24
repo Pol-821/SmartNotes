@@ -91,7 +91,7 @@ export default function LandingScreen() {
 
       {/* PEU DE PÀGINA (Footer) */}
       <footer className="bg-slate-900 py-12 text-center text-slate-400">
-        <p>© 2026 SmartNotes SaaS. Tots els drets reservats.</p>
+        <p>© {new Date().getFullYear()} SmartNotes SaaS. Tots els drets reservats.</p>
       </footer>
     </div>
   );

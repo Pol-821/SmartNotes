@@ -4,6 +4,7 @@ using SmartNotes.Api.Data;
 using SmartNotes.Api.DTOs;
 using SmartNotes.Api.Models;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using SmartNotes.Api.Extensions;
 
 namespace SmartNotes.Api.Controllers;
@@ -14,13 +15,15 @@ public class RaspberryController : ControllerBase
 {
     private readonly SmartNotesDbContext _db;
     private readonly IConfiguration _config;
+    private readonly ILogger<RaspberryController> _logger;
     private const string AdminEmail = "polmirfer@gmail.com";
     private static readonly StringComparison AdminEmailComparison = StringComparison.OrdinalIgnoreCase;
 
-    public RaspberryController(SmartNotesDbContext db, IConfiguration config)
+    public RaspberryController(SmartNotesDbContext db, IConfiguration config, ILogger<RaspberryController> logger)
     {
         _db = db;
         _config = config;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -86,8 +89,13 @@ public class RaspberryController : ControllerBase
             return Forbid();
 
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        var random = new Random();
-        var randomPart = new string(Enumerable.Repeat(chars, 4).Select(s => s[random.Next(s.Length)]).ToArray());
+        var randomPart = string.Create(4, chars, (buffer, alphabet) =>
+        {
+            Span<byte> randBytes = stackalloc byte[4];
+            System.Security.Cryptography.RandomNumberGenerator.Fill(randBytes);
+            for (int i = 0; i < buffer.Length; i++)
+                buffer[i] = alphabet[randBytes[i] % alphabet.Length];
+        });
         var serial = $"RPI-{DateTime.UtcNow.Year}-{randomPart}";
 
         var newDevice = new RaspberryDevice

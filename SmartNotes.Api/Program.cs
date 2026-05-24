@@ -1,3 +1,4 @@
+using AspNetCoreRateLimit;
 using SmartNotes.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +11,22 @@ using SmartNotes.Api.Services.AI;
 using Amazon.S3;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddMemoryCache();
+builder.Services.Configure<IpRateLimitOptions>(options =>
+{
+    options.GeneralRules = new List<RateLimitRule>
+    {
+        new() { Endpoint = "*/api/auth/login", Limit = 10, Period = "1m" },
+        new() { Endpoint = "*/api/auth/register", Limit = 5, Period = "1m" },
+        new() { Endpoint = "*/api/auth/forgot-password", Limit = 3, Period = "1h" },
+        new() { Endpoint = "*/api/auth/reset-password", Limit = 3, Period = "1h" },
+    };
+});
+builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
+builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+builder.Services.AddSingleton<IProcessingStrategy, AsyncKeyLockProcessingStrategy>();
 
 // Port dinàmic per Render (variable d'entorn PORT)
 var port = Environment.GetEnvironmentVariable("PORT");
@@ -35,15 +52,39 @@ builder.Services.Configure<FormOptions>(options =>
 });
 
 builder.Services.AddSingleton<AudioPreprocessor>();
+builder.Services.AddSingleton<FfmpegRunner>();
 
 builder.Services.AddSingleton<TranscriptionQueue>();
 builder.Services.AddSingleton<TranscriptionStore>();
 builder.Services.AddHostedService<TranscriptionWorker>();
 
+// Groq:ApiKey es carrega des de variables d'entorn (appsettings.json o env vars)
 var groqApiKey = builder.Configuration["Groq:ApiKey"] ?? throw new InvalidOperationException("Groq:ApiKey no configurada");
 var groqModel = builder.Configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
-builder.Services.AddSingleton<GroqClient>(sp => new GroqClient(groqApiKey, groqModel, sp.GetRequiredService<ILogger<GroqClient>>()));
-builder.Services.AddSingleton<GroqAudioClient>(sp => new GroqAudioClient(groqApiKey, sp.GetRequiredService<ILogger<GroqAudioClient>>()));
+
+builder.Services.AddHttpClient("GroqChat", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {groqApiKey}");
+    client.BaseAddress = new Uri("https://api.groq.com");
+});
+builder.Services.AddSingleton<GroqClient>(sp =>
+{
+    var factory = sp.GetRequiredService<IHttpClientFactory>();
+    return new GroqClient(factory.CreateClient("GroqChat"), groqModel, sp.GetRequiredService<ILogger<GroqClient>>());
+});
+
+builder.Services.AddHttpClient("GroqAudio", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(5);
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {groqApiKey}");
+    client.BaseAddress = new Uri("https://api.groq.com");
+});
+builder.Services.AddSingleton<GroqAudioClient>(sp =>
+{
+    var factory = sp.GetRequiredService<IHttpClientFactory>();
+    return new GroqAudioClient(factory.CreateClient("GroqAudio"), sp.GetRequiredService<ILogger<GroqAudioClient>>(), sp.GetRequiredService<FfmpegRunner>());
+});
 
 builder.Services.AddSingleton<SmartNotesEngine>();
 
@@ -60,7 +101,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = true;
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -113,13 +154,16 @@ builder.Services.AddScoped<NoteService>();
 
 builder.Services.AddScoped<ClassroomService>();
 
-// Orígens CORS: variable d'entorn (comma-separated) + hardcoded locals
+// Orígens CORS: appsettings.json + env var override + hardcoded locals
+var corsOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()?.ToList() ?? new();
+corsOrigins.Add("http://localhost:3000");
+corsOrigins.Add("http://localhost:5173");
 var envOrigins = Environment.GetEnvironmentVariable("AllowedOrigins");
-var corsOrigins = new List<string> { "http://localhost:3000", "http://localhost:5173" };
 if (!string.IsNullOrEmpty(envOrigins))
 {
     corsOrigins.AddRange(envOrigins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
 }
+corsOrigins = corsOrigins.Distinct().ToList();
 
 builder.Services.AddCors(options =>
 {
@@ -150,6 +194,10 @@ var app = builder.Build();
 
 app.UseCors("AllowReactApp");
 
+app.UseHttpsRedirection();
+
+app.UseIpRateLimiting();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -162,31 +210,16 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SmartNotesDbContext>();
     
-    var defaultPlans = new[]
-    {
-        new SmartNotes.Api.Models.SubscriptionPlan { Name = "Free", Description = "Per estudiants casuals. 4 hores d'àudio al mes.", PriceMonthly = 0m, SecondsPerMonth = 14400, IsActive = true },
-        new SmartNotes.Api.Models.SubscriptionPlan { Name = "Pro", Description = "Per estudiants seriosos. 40 hores d'àudio al mes.", PriceMonthly = 9.99m, SecondsPerMonth = 144000, IsActive = true },
-        new SmartNotes.Api.Models.SubscriptionPlan { Name = "Enterprise", Description = "Per professionals. 100 hores d'àudio al mes.", PriceMonthly = 24.99m, SecondsPerMonth = 360000, IsActive = true }
-    };
-
     if (!db.SubscriptionPlans.Any())
     {
-        db.SubscriptionPlans.AddRange(defaultPlans);
-    }
-    else
-    {
-        foreach (var plan in defaultPlans)
+        db.SubscriptionPlans.AddRange(new[]
         {
-            var existing = db.SubscriptionPlans.FirstOrDefault(p => p.Name == plan.Name);
-            if (existing != null)
-            {
-                existing.Description = plan.Description;
-                existing.PriceMonthly = plan.PriceMonthly;
-                existing.SecondsPerMonth = plan.SecondsPerMonth;
-            }
-        }
+            new SmartNotes.Api.Models.SubscriptionPlan { Name = "Free", Description = "Per estudiants casuals. 4 hores d'àudio al mes.", PriceMonthly = 0m, SecondsPerMonth = 14400, IsActive = true },
+            new SmartNotes.Api.Models.SubscriptionPlan { Name = "Pro", Description = "Per estudiants seriosos. 40 hores d'àudio al mes.", PriceMonthly = 9.99m, SecondsPerMonth = 144000, IsActive = true },
+            new SmartNotes.Api.Models.SubscriptionPlan { Name = "Enterprise", Description = "Per professionals. 100 hores d'àudio al mes.", PriceMonthly = 24.99m, SecondsPerMonth = 360000, IsActive = true }
+        });
+        db.SaveChanges();
     }
-    db.SaveChanges();
 }
 
 app.Run();

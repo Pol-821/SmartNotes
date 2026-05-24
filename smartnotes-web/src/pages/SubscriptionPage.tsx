@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import { Check, Loader2, CreditCard, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -61,7 +62,8 @@ export default function SubscriptionPage() {
       });
     } catch (error: any) {
       console.error("Error subscrivint:", error);
-      toast.error(error.response?.data || "Error en subscriure's");
+      const msg = typeof error.response?.data === 'string' ? error.response.data : error.response?.data?.error || "Error en subscriure's";
+      toast.error(msg);
     } finally {
       setIsSubscribing(null);
     }
@@ -74,16 +76,17 @@ export default function SubscriptionPage() {
       setMySubscription({ hasSubscription: false });
     } catch (error: any) {
       console.error("Error cancel·lant:", error);
-      toast.error(error.response?.data || "Error en cancel·lar");
+      const msg = typeof error.response?.data === 'string' ? error.response.data : error.response?.data?.error || "Error en cancel·lar";
+      toast.error(msg);
     }
   };
 
-  if (isLoading) return <div className="text-center py-12"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
+  if (isLoading) return <FullPageLoader text="Carregant plans..." />;
 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <button onClick={() => navigate(-1)} className="text-sm text-slate-500 hover:text-slate-900 mb-4 inline-flex items-center gap-1">
+        <button onClick={() => navigate('/notes')} className="text-sm text-slate-500 hover:text-slate-900 mb-4 inline-flex items-center gap-1">
           ← Tornar
         </button>
         <h1 className="text-3xl font-bold text-slate-900">Plans de Subscripció</h1>

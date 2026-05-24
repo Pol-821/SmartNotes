@@ -5,7 +5,9 @@ import { BookOpen, LogOut, Search, Folder, GraduationCap, ArrowRight, Loader2 } 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
+import { clearAuth } from '@/lib/auth';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -53,20 +55,11 @@ export default function StudentDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('role');
-    localStorage.removeItem('email');
+    clearAuth();
     navigate('/login');
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <FullPageLoader text="Carregant les teves classes..." />;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

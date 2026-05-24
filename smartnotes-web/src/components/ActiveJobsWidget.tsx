@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import { Cpu, Loader2, CheckCircle2, AlertCircle, AudioLines, Languages, FileText, Sparkles } from 'lucide-react';
 
@@ -24,43 +24,37 @@ export default function ActiveJobsWidget() {
   const [activeJobs, setActiveJobs] = useState<any[]>([]);
   const [detailedJob, setDetailedJob] = useState<any | null>(null);
 
-  const fetchActiveJobs = useCallback(async () => {
-    try {
-      const response = await api.get('/transcription/active');
-      const jobs = response.data || [];
-      setActiveJobs(jobs);
-    } catch (error) {
-      console.error("Error fetching active jobs:", error);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchActiveJobs();
-    const interval = setInterval(fetchActiveJobs, 3000);
-    return () => clearInterval(interval);
-  }, [fetchActiveJobs]);
+    let cancelled = false;
 
-  useEffect(() => {
-    const pendingJobs = activeJobs.filter((j) => j.status !== 'Done' && j.status !== 'Error' && j.status !== 'Cancelled');
-    if (pendingJobs.length === 0) {
-      setDetailedJob(null);
-      return;
-    }
-
-    const firstJob = pendingJobs[0];
-    const checkJob = async () => {
+    const poll = async () => {
       try {
-        const response = await api.get(`/transcription/status/${firstJob.id}`);
-        setDetailedJob(response.data);
+        const response = await api.get('/transcription/active');
+        if (cancelled) return;
+        const jobs = response.data || [];
+        setActiveJobs(jobs);
+
+        const pendingJobs = jobs.filter((j: any) => j.status !== 'Done' && j.status !== 'Error' && j.status !== 'Cancelled');
+        if (pendingJobs.length > 0) {
+          const statusResponse = await api.get(`/transcription/status/${pendingJobs[0].id}`);
+          if (!cancelled) {
+            setDetailedJob(statusResponse.data);
+          }
+        } else {
+          setDetailedJob(null);
+        }
       } catch (error) {
-        console.error("Error fetching job status:", error);
+        console.error("Error polling jobs:", error);
       }
     };
 
-    checkJob();
-    const interval = setInterval(checkJob, 3000);
-    return () => clearInterval(interval);
-  }, [activeJobs]);
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   if (!detailedJob) return null;
 

@@ -1,26 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
-import { FileText, Sparkles, Search, Calendar, ChevronRight, Timer } from 'lucide-react';
+import { Sparkles, Search, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
+import NoteCard from '@/components/NoteCard';
+import { useUser } from '@/contexts/UserContext';
+import type { Note } from '@/types/api';
 
 export default function DashboardScreen() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [notes, setNotes] = useState<any[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const { user: userProfile, loading: profileLoading } = useUser();
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
-
-      const profileResponse = await api.get('/user/me');
-      setUserProfile(profileResponse.data);
 
       const notesResponse = await api.get('/notes?page=1&pageSize=50');
       const notesArray = notesResponse.data.items || notesResponse.data.Items || [];
@@ -40,9 +40,9 @@ export default function DashboardScreen() {
 
   // REVISIÓ AUTOMÀTICA (POLLING)
   useEffect(() => {
-    const hasProcessing = notes.some(note => note.content?.includes('[⏳'));
-    if (!hasProcessing) return;
-    
+    const hasProcessingNotes = notes.some(note => note.content?.includes('[⏳'));
+    if (!hasProcessingNotes) return;
+
     const interval = setInterval(async () => {
       try {
         const response = await api.get('/notes?page=1&pageSize=50');
@@ -50,11 +50,12 @@ export default function DashboardScreen() {
         setNotes(notesArray);
       } catch (err) {
         console.error("Error polling notes:", err);
+        toast.error("Error en l'actualització automàtica");
       }
-    }, 5000); 
+    }, 5000);
 
-    return () => clearInterval(interval); 
-  }, []); // <-- només una vegada al mount, no depèn de notes
+    return () => clearInterval(interval);
+  }, [notes]);
 
   // Lògica del Cercador i FILTRATGE DE NOTES PENDENTS
   // Només mostrem a la graella les notes que NO tenen l'etiqueta de processament
@@ -64,7 +65,7 @@ export default function DashboardScreen() {
     note.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isLoading) {
+  if (isLoading || profileLoading) {
     return <FullPageLoader text="Sincronitzant dades amb el servidor..." />;
   }
 
@@ -150,35 +151,7 @@ export default function DashboardScreen() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNotes.map((note) => (
-            <Card 
-              key={note.id} 
-              className="group cursor-pointer hover:border-blue-500 hover:shadow-md transition-all duration-200 bg-white flex flex-col"
-              onClick={() => navigate(`/notes/${note.id}`)}
-            >
-              <div className="p-6 space-y-4 flex-1">
-                <div className="flex justify-between items-start">
-                  <div className="p-2 bg-blue-50 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <ChevronRight className="text-slate-300 group-hover:text-blue-500 transition-colors" />
-                </div>
-                
-                <div>
-                  <h3 className="font-semibold text-lg text-slate-900 line-clamp-2 leading-tight">
-                    {note.title || "Sense títol"}
-                  </h3>
-                </div>
-              </div>
-              
-              <div className="px-6 py-4 border-t border-slate-100 mt-auto">
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4" />
-                    <span>{note.createdAt ? new Date(note.createdAt).toLocaleDateString('ca-ES') : 'Avui'}</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+            <NoteCard key={note.id} note={note} onClick={() => navigate(`/notes/${note.id}`)} />
           ))}
         </div>
       )}

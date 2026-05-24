@@ -12,11 +12,10 @@ public class GroqClient
     private readonly ILogger<GroqClient> _logger;
     private readonly string _model;
 
-    public GroqClient(string apiKey, string model, ILogger<GroqClient> logger)
+    public GroqClient(HttpClient http, string model, ILogger<GroqClient> logger)
     {
-        _http = new HttpClient();
+        _http = http;
         _http.Timeout = TimeSpan.FromMinutes(2);
-        _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         _model = model;
         _logger = logger;
     }
@@ -78,7 +77,7 @@ public class GroqClient
             HttpResponseMessage? response = null;
             try
             {
-                response = await _http.PostAsJsonAsync("https://api.groq.com/openai/v1/chat/completions", payload, ct);
+                response = await _http.PostAsJsonAsync("/openai/v1/chat/completions", payload, ct);
                 
                 if ((int)response.StatusCode == 429)
                 {
@@ -89,7 +88,7 @@ public class GroqClient
                         throw new HttpRequestException("Rate limited after retries");
                     }
                     _logger.LogWarning("GROQ rate limited (429). Waiting {Backoff}s before retry (Attempt {Current}/{Max})", backoff, i + 1, maxRetries);
-                    await Task.Delay(TimeSpan.FromSeconds(backoff));
+                    await Task.Delay(TimeSpan.FromSeconds(backoff), ct);
                     continue;
                 }
                 
@@ -114,7 +113,7 @@ public class GroqClient
 
                 var backoff = delaySeconds * (i + 1);
                 _logger.LogWarning("Connection error. Retrying in {Delay}s... (Attempt {Current}/{Max})", backoff, i + 1, maxRetries);
-                await Task.Delay(TimeSpan.FromSeconds(backoff));
+                await Task.Delay(TimeSpan.FromSeconds(backoff), ct);
             }
             finally
             {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using SmartNotes.Api.Models;
 
@@ -6,176 +5,90 @@ namespace SmartNotes.Api.Services;
 
 public class AudioPreprocessor
 {
+    private readonly FfmpegRunner _ffmpeg;
+    private readonly ILogger<AudioPreprocessor> _logger;
+
+    public AudioPreprocessor(FfmpegRunner ffmpeg, ILogger<AudioPreprocessor> logger)
+    {
+        _ffmpeg = ffmpeg;
+        _logger = logger;
+    }
+
+    private const string AudioFilters = "afftdn=nf=-25,highpass=f=200,lowpass=f=3000,loudnorm,silenceremove=stop_periods=-1:stop_duration=10:stop_threshold=-35dB";
+
     public async Task<string> EnhanceAudioAsync(string inputPath, CancellationToken ct)
     {
-        string outputPath = inputPath.Replace(Path.GetExtension(inputPath), "_enhanced.wav");
-        
-        string audioFilters = "afftdn=nf=-25,highpass=f=200,lowpass=f=3000,loudnorm,silenceremove=stop_periods=-1:stop_duration=10:stop_threshold=-35dB";
-
-        if (File.Exists(outputPath))
-        {
-            File.Delete(outputPath);
-        }
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            Arguments = $"-nostdin -y -i \"{inputPath}\" -af \"{audioFilters}\" -ar 16000 -ac 1 \"{outputPath}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-
-        process.ErrorDataReceived += (s, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                if (e.Data.Contains("time="))
-                {
-                    string temps = e.Data.Split("time=")[1].Split(" ")[0];
-                    Console.Write($"\r[FFMPEG + DENOISE] Processat: {temps} d'àudio...  ");
-                }
-            }
-        };
-
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        try
-        {
-            await process.WaitForExitAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(); } catch { }
-            throw;
-        }
-
-        Console.WriteLine("\n[AUDIO] Neteja profunda completada.");
-
-        if (process.ExitCode != 0)
-        {
-            throw new Exception($"Error en el filtratge. ExitCode: {process.ExitCode}");
-        }
-
-        return outputPath;
+        return await EnhanceAudioInternalAsync(inputPath, null, ct);
     }
 
     public async Task<string> EnhanceAudioWithProgressAsync(string inputPath, TranscriptionJob job, CancellationToken ct)
     {
-        string outputPath = inputPath.Replace(Path.GetExtension(inputPath), "_enhanced.wav");
-        
-        string audioFilters = "afftdn=nf=-25,highpass=f=200,lowpass=f=3000,loudnorm,silenceremove=stop_periods=-1:stop_duration=10:stop_threshold=-35dB";
+        return await EnhanceAudioInternalAsync(inputPath, job, ct);
+    }
+
+    private async Task<string> EnhanceAudioInternalAsync(string inputPath, TranscriptionJob? job, CancellationToken ct)
+    {
+        var dir = Path.GetDirectoryName(inputPath) ?? ".";
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(inputPath);
+        string outputPath = Path.Combine(dir, nameWithoutExt + "_enhanced.wav");
 
         if (File.Exists(outputPath))
-        {
             File.Delete(outputPath);
-        }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            Arguments = $"-nostdin -y -i \"{inputPath}\" -af \"{audioFilters}\" -ar 16000 -ac 1 \"{outputPath}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-
-        process.ErrorDataReceived += (s, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data) && e.Data.Contains("time="))
+        await _ffmpeg.RunWithErrorDataAsync("ffmpeg",
+            $"-nostdin -y -i \"{inputPath}\" -af \"{AudioFilters}\" -ar 16000 -ac 1 \"{outputPath}\"",
+            data =>
             {
-                string temps = e.Data.Split("time=")[1].Split(" ")[0];
-                Console.Write($"\r[FFMPEG + DENOISE] Processat: {temps} d'àudio...  ");
-                
-                if (TimeSpan.TryParse(temps, CultureInfo.InvariantCulture, out var processed))
+                if (data.Contains("time="))
                 {
-                    var totalSeconds = processed.TotalSeconds;
-                    var percentage = (int)Math.Min(95, 5 + (totalSeconds / 600) * 20);
-                    job.ProgressMessage = $"Netejant àudio... {temps} / {job.AudioDuration ?? "???:??:???"}";
-                    job.ProgressPercentage = Math.Max(job.ProgressPercentage, percentage);
+                    string temps = data.Split("time=")[1].Split(" ")[0];
+                    _logger.LogInformation("FFMPEG processat: {Temps}", temps);
+                    if (job != null)
+                    {
+                        job.ProgressMessage = $"Netejant àudio... {temps}";
+                        job.ProgressPercentage = Math.Max(job.ProgressPercentage, 5 + GetPercentageFromTime(temps));
+                    }
                 }
-            }
-        };
+            }, ct);
 
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        try
-        {
-            await process.WaitForExitAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(); } catch { }
-            throw;
-        }
-
-        Console.WriteLine("\n[AUDIO] Neteja profunda completada.");
-
-        if (process.ExitCode != 0)
-        {
-            throw new Exception($"Error en el filtratge. ExitCode: {process.ExitCode}");
-        }
-
+        _logger.LogInformation("Neteja d'àudio completada: {Output}", outputPath);
         return outputPath;
+    }
+
+    private static int GetPercentageFromTime(string timeStr)
+    {
+        if (TimeSpan.TryParse(timeStr, CultureInfo.InvariantCulture, out var processed))
+            return (int)Math.Min(95, 5 + (processed.TotalSeconds / 600) * 20);
+        return 5;
     }
 
     public async Task<string> ExtractLanguageSampleAsync(string inputPath, CancellationToken ct)
     {
-        string samplePath = inputPath.Replace(Path.GetExtension(inputPath), "_sample.wav");
-        
+        var dir = Path.GetDirectoryName(inputPath) ?? ".";
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(inputPath);
+        string samplePath = Path.Combine(dir, nameWithoutExt + "_sample.wav");
+
         if (File.Exists(samplePath)) File.Delete(samplePath);
 
         double duration = await GetAudioDurationSecondsAsync(inputPath, ct);
         double startTime = duration < 60 ? 0 : 60;
         double sampleDuration = Math.Min(30, duration);
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            Arguments = $"-nostdin -y -ss {startTime} -t {sampleDuration} -i \"{inputPath}\" -c copy \"{samplePath}\"",
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var result = await _ffmpeg.RunAsync("ffmpeg",
+            $"-nostdin -y -ss {startTime} -t {sampleDuration} -i \"{inputPath}\" -c copy \"{samplePath}\"", ct);
 
-        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        process.Start();
-        
-        var errorTask = process.StandardError.ReadToEndAsync();
-
-        await process.WaitForExitAsync(ct);
-        await errorTask;
+        if (result.ExitCode != 0)
+            throw new Exception($"Error extraient mostra d'idioma. ExitCode: {result.ExitCode}");
 
         return samplePath;
     }
 
     public async Task<double> GetAudioDurationSecondsAsync(string inputPath, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ffprobe",
-            Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{inputPath}\"",
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var result = await _ffmpeg.RunAsync("ffprobe",
+            $"-v error -show_entries format=duration -of csv=p=0 \"{inputPath}\"", ct);
 
-        var process = new Process { StartInfo = psi };
-        process.Start();
-        var output = await process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync(ct);
-
-        if (double.TryParse(output.Trim(), CultureInfo.InvariantCulture, out var duration))
+        if (double.TryParse(result.StandardOutput.Trim(), CultureInfo.InvariantCulture, out var duration))
             return duration;
 
         return 0;

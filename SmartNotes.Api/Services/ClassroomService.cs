@@ -7,23 +7,25 @@ namespace SmartNotes.Api.Services
     public class ClassroomService
     {
         private readonly SmartNotesDbContext _context;
+    private readonly ILogger<ClassroomService> _logger;
 
-        public ClassroomService(SmartNotesDbContext context)
+        public ClassroomService(SmartNotesDbContext context, ILogger<ClassroomService> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         // Llistar totes les aules d'un professor
-        public async Task<List<Classroom>> GetClassroomsByUserAsync(int userId)
+        public async Task<List<Classroom>> GetClassroomsByUserAsync(int userId, CancellationToken ct = default)
         {
             return await _context.Classrooms
                 .Where(c => c.UserId == userId)
                 .OrderByDescending(c => c.CreatedAt)
-                .ToListAsync();
+                .ToListAsync(ct);
         }
 
         // Crear una nova aula
-        public async Task<Classroom> CreateClassroomAsync(int userId, string name, string color)
+        public async Task<Classroom> CreateClassroomAsync(int userId, string name, string color, CancellationToken ct = default)
         {
             var classroom = new Classroom
             {
@@ -35,19 +37,19 @@ namespace SmartNotes.Api.Services
             };
 
             _context.Classrooms.Add(classroom);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);
 
             return classroom;
         }
 
         // Esborrar una aula (Molt important: només el propietari la pot esborrar!)
-        public async Task<bool> DeleteClassroomAsync(int id, int userId)
+        public async Task<bool> DeleteClassroomAsync(int id, int userId, CancellationToken ct = default)
         {
-            var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
+            var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId, ct);
             if (classroom == null) return false;
 
             _context.Classrooms.Remove(classroom);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);
             return true;
         }
         private string GenerateClassCode()
@@ -61,87 +63,87 @@ namespace SmartNotes.Api.Services
             });
         }
 
-        public async Task<bool> JoinClassroomAsync(int userId, string code)
+        public async Task<bool> JoinClassroomAsync(int userId, string code, CancellationToken ct = default)
         {
             // Busquem si existeix alguna classe amb aquest codi (ho passem a majúscules per evitar errors)
-            var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Code == code.ToUpper().Trim());
+            var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Code == code.ToUpper().Trim(), ct);
             if (classroom == null) return false;
 
             // Comprovem que l'alumne no estigui ja matriculat per evitar duplicats
-            var alreadyEnrolled = await _context.Enrollments.AnyAsync(e => e.UserId == userId && e.ClassroomId == classroom.Id);
+            var alreadyEnrolled = await _context.Enrollments.AnyAsync(e => e.UserId == userId && e.ClassroomId == classroom.Id, ct);
             if (alreadyEnrolled) return true;
 
             // Creem la matrícula
             var enrollment = new Enrollment { UserId = userId, ClassroomId = classroom.Id };
             _context.Enrollments.Add(enrollment);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);
             
             return true;
         }
 
         // 2. Obtenir les classes on un alumne està matriculat
-        public async Task<List<Classroom>> GetEnrolledClassroomsAsync(int userId)
+        public async Task<List<Classroom>> GetEnrolledClassroomsAsync(int userId, CancellationToken ct = default)
         {
             // Busquem els IDs de les aules d'aquest alumne
             var enrolledClassroomIds = await _context.Enrollments
                 .Where(e => e.UserId == userId)
                 .Select(e => e.ClassroomId)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             // Retornem la informació completa d'aquestes aules
             return await _context.Classrooms
                 .Where(c => enrolledClassroomIds.Contains(c.Id))
                 .OrderByDescending(c => c.CreatedAt)
-                .ToListAsync();
+                .ToListAsync(ct);
         }
 
-        public async Task<List<Note>> GetClassroomNotesForStudentAsync(int classroomId, int userId)
+        public async Task<List<Note>> GetClassroomNotesForStudentAsync(int classroomId, int userId, CancellationToken ct = default)
         {
             // Comprovem si està matriculat
-            var isEnrolled = await _context.Enrollments.AnyAsync(e => e.ClassroomId == classroomId && e.UserId == userId);
+            var isEnrolled = await _context.Enrollments.AnyAsync(e => e.ClassroomId == classroomId && e.UserId == userId, ct);
             if (!isEnrolled) return new List<Note>(); // Si no està matriculat, retornem una llista buida per denegar l'accés
 
             // Si està matriculat, li donem els apunts d'aquella aula
             return await _context.Notes
                 .Where(n => n.ClassroomId == classroomId)
                 .OrderByDescending(n => n.CreatedAt)
-                .ToListAsync();
+                .ToListAsync(ct);
         }
 
-        public async Task<object?> GetStudentsInClassroomAsync(int classroomId, int professorId)
+        public async Task<object?> GetStudentsInClassroomAsync(int classroomId, int professorId, CancellationToken ct = default)
         {
             // Verifiquem que l'aula és d'aquest professor
-            var isOwner = await _context.Classrooms.AnyAsync(c => c.Id == classroomId && c.UserId == professorId);
+            var isOwner = await _context.Classrooms.AnyAsync(c => c.Id == classroomId && c.UserId == professorId, ct);
             if (!isOwner) return null;
 
             // Busquem els IDs dels alumnes matriculats
             var studentIds = await _context.Enrollments
                 .Where(e => e.ClassroomId == classroomId)
                 .Select(e => e.UserId)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             // Retornem només dades segures (sense contrasenyes)
             return await _context.Users
                 .Where(u => studentIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.Username, u.Email })
-                .ToListAsync();
+                .ToListAsync(ct);
         }
 
         // 2. Expulsar un alumne de la classe
-        public async Task<bool> RemoveStudentAsync(int classroomId, int studentId, int professorId)
+        public async Task<bool> RemoveStudentAsync(int classroomId, int studentId, int professorId, CancellationToken ct = default)
         {
             // Verifiquem propietat de l'aula
-            var isOwner = await _context.Classrooms.AnyAsync(c => c.Id == classroomId && c.UserId == professorId);
+            var isOwner = await _context.Classrooms.AnyAsync(c => c.Id == classroomId && c.UserId == professorId, ct);
             if (!isOwner) return false;
 
             // Busquem la matrícula
             var enrollment = await _context.Enrollments
-                .FirstOrDefaultAsync(e => e.ClassroomId == classroomId && e.UserId == studentId);
+                .FirstOrDefaultAsync(e => e.ClassroomId == classroomId && e.UserId == studentId, ct);
             
             if (enrollment == null) return false;
 
             _context.Enrollments.Remove(enrollment);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);
             return true;
         }
     }

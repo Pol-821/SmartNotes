@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
-import { FileText, Search, Calendar, ChevronRight, FolderOpen, ArrowLeft, Trash2, Users, Copy, AlertTriangle, UserMinus } from 'lucide-react';
+import { FileText, Search, Calendar, ChevronRight, FolderOpen, ArrowLeft, Trash2, Users, Copy, UserMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import type { Classroom, Note, Student } from '@/types/api';
 
 export default function ClassroomScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   
   const [isLoading, setIsLoading] = useState(true);
-  const [classroom, setClassroom] = useState<any>(null);
-  const [notes, setNotes] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
+  const [classroom, setClassroom] = useState<Classroom | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'notes' | 'students'>('notes');
@@ -60,7 +62,7 @@ export default function ClassroomScreen() {
     try {
       await api.delete(`/classroom/${id}`);
       toast.success("Aula eliminada");
-      window.location.href = '/notes'; 
+      navigate('/notes'); 
     } catch (error) {
       toast.error("No s'ha pogut eliminar l'aula");
       setIsDeleteDialogOpen(false);
@@ -237,40 +239,28 @@ export default function ClassroomScreen() {
       )}
 
       {/* MODAL ELIMINAR AULA */}
-      {isDeleteDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-red-100 p-2 rounded-full text-red-600"><AlertTriangle className="h-6 w-6" /></div>
-              <h3 className="text-xl font-bold text-slate-900">Eliminar Aula</h3>
-            </div>
-            <p className="text-slate-600 text-sm mb-6">Estàs segur que vols eliminar <strong>{classroom?.name}</strong>? Els apunts tornaran a la safata principal.</p>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel·lar</Button>
-              <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={executeDeleteClassroom}>Sí, eliminar-la</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Eliminar Aula"
+        description={`Estàs segur que vols eliminar ${classroom?.name}? Els apunts tornaran a la safata principal.`}
+        confirmLabel="Sí, eliminar-la"
+        cancelLabel="Cancel·lar"
+        variant="destructive"
+        onConfirm={executeDeleteClassroom}
+      />
 
-      {/* --- NOVA MODAL: EXPULSAR ALUMNE --- */}
-      {studentToKick && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-amber-100 p-2 rounded-full text-amber-600"><UserMinus className="h-6 w-6" /></div>
-              <h3 className="text-xl font-bold text-slate-900">Expulsar Alumne</h3>
-            </div>
-            <p className="text-slate-600 text-sm mb-6 leading-relaxed">
-              Estàs segur que vols expulsar a <strong>{studentToKick.name}</strong> d'aquesta assignatura? Deixarà de tenir accés als apunts i haurà de tornar a demanar-te el codi per entrar.
-            </p>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setStudentToKick(null)}>Cancel·lar</Button>
-              <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={executeKickStudent}>Sí, expulsar</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL EXPULSAR ALUMNE */}
+      <ConfirmDialog
+        open={studentToKick !== null}
+        onOpenChange={(open) => { if (!open) setStudentToKick(null); }}
+        title="Expulsar Alumne"
+        description={`Estàs segur que vols expulsar a ${studentToKick?.name} d'aquesta assignatura? Deixarà de tenir accés als apunts i haurà de tornar a demanar-te el codi per entrar.`}
+        confirmLabel="Sí, expulsar"
+        cancelLabel="Cancel·lar"
+        variant="default"
+        onConfirm={executeKickStudent}
+      />
 
     </div>
   );

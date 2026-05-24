@@ -20,10 +20,6 @@ export default function ForgotPasswordScreen() {
 
     try {
       await api.post('/auth/forgot-password', { email });
-      
-      // Simulem el temps de càrrega per ara
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
       setIsSent(true);
       toast.success('Correu enviat', {
         description: "Revisa la teva safata d'entrada (i el correu brossa).",

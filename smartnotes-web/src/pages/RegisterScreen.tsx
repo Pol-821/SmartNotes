@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { BookOpen, GraduationCap, ArrowLeft, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { getToken, isTokenExpired, clearAuth } from '@/lib/auth';
 
 export default function RegisterScreen() {
   const navigate = useNavigate();
@@ -22,13 +23,15 @@ export default function RegisterScreen() {
   const [languages, setLanguages] = useState<string[]>([]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
-    
-    if (token) {
-      if (role === 'alumne') navigate('/student');
-      else navigate('/notes');
+    const token = getToken();
+    if (!token) return;
+    if (isTokenExpired(token)) {
+      clearAuth();
+      return;
     }
+    const role = localStorage.getItem('role');
+    if (role === 'alumne') navigate('/student');
+    else navigate('/notes');
   }, [navigate]);
 
   const toggleLanguage = (lang: string) => {
@@ -55,11 +58,12 @@ export default function RegisterScreen() {
     setIsLoading(true);
 
     try {
-      // El backend només accepta username, email i password
       await api.post('/auth/register', {
         username,
         email,
-        password
+        password,
+        role,
+        languages: role === 'professor' ? languages : []
       });
 
       toast.success('Compte creat correctament!', {

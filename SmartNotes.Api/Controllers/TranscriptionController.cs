@@ -20,8 +20,10 @@ public class TranscriptionController : ControllerBase
     private readonly SmartNotesDbContext _db;
     private readonly IConfiguration _config;
     private readonly R2Service _r2;
+    private readonly UserService _userService;
+    private readonly ILogger<TranscriptionController> _logger;
 
-    public TranscriptionController(WhisperService whisper, TranscriptionStore store, TranscriptionQueue queue, SmartNotesDbContext db, IConfiguration config, R2Service r2)
+    public TranscriptionController(WhisperService whisper, TranscriptionStore store, TranscriptionQueue queue, SmartNotesDbContext db, IConfiguration config, R2Service r2, UserService userService, ILogger<TranscriptionController> logger)
     {
         _whisper = whisper;
         _store = store;
@@ -29,6 +31,8 @@ public class TranscriptionController : ControllerBase
         _db = db;
         _config = config;
         _r2 = r2;
+        _userService = userService;
+        _logger = logger;
     }
 
     public class RetryRequest
@@ -39,7 +43,7 @@ public class TranscriptionController : ControllerBase
     [HttpPost]
     [Authorize]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> Transcribe(IFormFile file)
+    public async Task<IActionResult> Transcribe(IFormFile file, CancellationToken ct = default)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
@@ -48,16 +52,9 @@ public class TranscriptionController : ControllerBase
             return BadRequest("File too large. Maximum 200 MB.");
 
         var userId = GetUserId();
-        var user = await _db.Users.FindAsync(userId);
+        var user = await _db.Users.FindAsync(new object[] { userId }, ct);
         if (user == null)
             return NotFound("Usuari no trobat.");
-
-        // Comprovar saldo (estimar durada per mida ~64kbps)
-        var estimatedSeconds = (int)(file.Length / 8000.0);
-        if (user.SecondsAvailable < estimatedSeconds)
-        {
-            return StatusCode(402, new { error = "No tens suficients minuts per processar aquesta transcripció." });
-        }
 
         var allowedExtensions = new[] { ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".wma" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -67,13 +64,18 @@ public class TranscriptionController : ControllerBase
         var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(file.FileName);
 
         using var ms = new MemoryStream();
-        await file.CopyToAsync(ms);
+        await file.CopyToAsync(ms, ct);
         ms.Position = 0;
 
-        var s3Key = await _r2.UploadAsync(ms, file.FileName, mimeType);
+        var s3Key = await _r2.UploadAsync(ms, file.FileName, mimeType, ct);
 
-        // Cobrar el peatge (estimació)
-        user.SecondsAvailable -= estimatedSeconds;
+        // Comprovar saldo i cobrar atòmicament (estimar durada per mida ~64kbps)
+        var estimatedSeconds = (int)(file.Length / 8000.0);
+        if (!await _userService.TryDeductSecondsAsync(userId, estimatedSeconds, ct))
+        {
+            await _r2.DeleteAsync(s3Key, ct);
+            return StatusCode(402, new { error = "No tens suficients minuts per processar aquesta transcripció." });
+        }
 
         var job = _store.CreateJob();
         job.FilePath = s3Key;
@@ -84,9 +86,10 @@ public class TranscriptionController : ControllerBase
         _store.Update(job);
         _queue.Enqueue(job);
 
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
 
-        return Ok(new { jobId = job.Id, remainingBalance = user.SecondsAvailable });
+        var freshUser = await _db.Users.FindAsync(new object[] { userId }, ct);
+        return Ok(new { jobId = job.Id, remainingBalance = freshUser?.SecondsAvailable ?? 0 });
     }
 
     [HttpGet("{id}")]
@@ -130,11 +133,11 @@ public class TranscriptionController : ControllerBase
         if (record == null)
             return NotFound();
 
-        return Ok(record);
+        return Ok(new { record.Id, record.OriginalFileName, record.CreatedAt, record.CleanText });
     }
 
     [HttpPost("raspberry")]
-    public async Task<IActionResult> UploadFromRaspberry(IFormFile file)
+    public async Task<IActionResult> UploadFromRaspberry(IFormFile file, CancellationToken ct = default)
     {
         if (!Request.Headers.TryGetValue("X-Serial-Number", out var serialHeader))
             return Unauthorized("Missing serial number");
@@ -168,10 +171,10 @@ public class TranscriptionController : ControllerBase
         var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(file.FileName);
 
         using var ms = new MemoryStream();
-        await file.CopyToAsync(ms);
+        await file.CopyToAsync(ms, ct);
         ms.Position = 0;
 
-        var s3Key = await _r2.UploadAsync(ms, file.FileName, mimeType);
+        var s3Key = await _r2.UploadAsync(ms, file.FileName, mimeType, ct);
 
         var job = _store.CreateJob();
         job.FilePath = s3Key;
@@ -187,25 +190,25 @@ public class TranscriptionController : ControllerBase
 
     [HttpDelete("record/{id}")]
     [Authorize]
-    public IActionResult DeleteRecord(int id)
+    public async Task<IActionResult> DeleteRecord(int id, CancellationToken ct = default)
     {
         var userId = GetUserId();
 
-        var record = _db.Transcriptions
-            .FirstOrDefault(t => t.Id == id && t.UserId == userId);
+        var record = await _db.Transcriptions
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, ct);
 
         if (record == null)
             return NotFound("Record not found");
 
         _db.Transcriptions.Remove(record);
-        _db.SaveChanges();
+        await _db.SaveChangesAsync(ct);
 
         return Ok("Record deleted");
     }
 
     [HttpGet("history")]
     [Authorize]
-    public IActionResult GetHistory(int page = 1, int pageSize = 20)
+    public async Task<IActionResult> GetHistory(int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
         var userId = GetUserId();
 
@@ -213,19 +216,20 @@ public class TranscriptionController : ControllerBase
             .Where(t => t.UserId == userId)
             .OrderByDescending(t => t.CreatedAt);
 
-        var total = query.Count();
+        var total = await query.CountAsync(ct);
 
-        var items = query
+        var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToList();
+            .ToListAsync(ct);
 
+        var projectedItems = items.Select(i => new { i.Id, i.OriginalFileName, i.CreatedAt, i.CleanText }).ToList();
         return Ok(new
         {
             total,
             page,
             pageSize,
-            items
+            items = projectedItems
         });
     }
 
@@ -251,9 +255,9 @@ public class TranscriptionController : ControllerBase
     }
     [HttpPost("{id}/retry")]
     [Authorize]
-    public async Task<IActionResult> RetryTranscription(string id, [FromBody] RetryRequest request)
+    public async Task<IActionResult> RetryTranscription(string id, [FromBody] RetryRequest request, CancellationToken ct = default)
     {
-        var record = await _db.Transcriptions.FirstOrDefaultAsync(t => t.JobId == id);
+        var record = await _db.Transcriptions.FirstOrDefaultAsync(t => t.JobId == id, ct);
         if (record == null) return NotFound("Transcripció no trobada.");
 
         // Verificar que l'usuari sigui el propietari
@@ -311,11 +315,11 @@ public class TranscriptionController : ControllerBase
 
     [HttpGet("{jobId}/audio")]
     [Authorize]
-    public async Task<IActionResult> GetAudioStream(string jobId)
+    public async Task<IActionResult> GetAudioStream(string jobId, CancellationToken ct = default)
     {
         var userId = GetUserId();
 
-        var record = await _db.Transcriptions.FirstOrDefaultAsync(t => t.JobId == jobId && t.UserId == userId);
+        var record = await _db.Transcriptions.FirstOrDefaultAsync(t => t.JobId == jobId && t.UserId == userId, ct);
         
         if (record == null) 
             return NotFound("Transcripció no trobada o no tens permisos.");

@@ -4,11 +4,23 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Check, Sparkles, ArrowLeft, Zap, Building2 } from 'lucide-react';
 
+interface Plan {
+  name: string;
+  description: string;
+  priceMonthly: string;
+  priceAnnual: string;
+  icon: React.ReactNode;
+  features: string[];
+  buttonText: string;
+  buttonVariant: "default" | "outline" | "ghost" | "secondary" | "destructive" | "link";
+  popular: boolean;
+}
+
 export default function PricingScreen() {
   const navigate = useNavigate();
   const [isAnnual, setIsAnnual] = useState(false);
 
-  const plans = [
+  const plans: Plan[] = [
     {
       name: "Bàsic",
       description: "Perfecte per a alumnes i proves puntuals.",
@@ -139,7 +151,7 @@ export default function PricingScreen() {
               </ul>
 
               <Button 
-                variant={plan.buttonVariant as any} 
+                variant={plan.buttonVariant} 
                 className={`w-full h-12 text-base ${plan.popular ? 'bg-blue-600 hover:bg-blue-700 shadow-md' : 'bg-white'}`}
                 onClick={() => {
                   if (plan.name === "Bàsic") navigate('/notes');

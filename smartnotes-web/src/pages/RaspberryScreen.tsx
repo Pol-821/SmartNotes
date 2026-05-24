@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
 import { Cpu, Server, Plus, Trash2, Copy, Loader2, Factory, Settings2, KeyRound, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 
 export default function RaspberryScreen() {
+  const navigate = useNavigate();
   const [devices, setDevices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [serialNumber, setSerialNumber] = useState('');
@@ -52,7 +55,8 @@ export default function RaspberryScreen() {
       setSerialNumber('');
       fetchDevices();
     } catch (error: any) {
-      toast.error(error.response?.data || "No s'ha pogut vincular.");
+      const msg = typeof error.response?.data === 'string' ? error.response.data : error.response?.data?.error || "No s'ha pogut vincular.";
+      toast.error(msg);
     } finally {
       setIsLinking(false);
     }
@@ -89,7 +93,7 @@ export default function RaspberryScreen() {
     toast.success("Copiat al porta-retalls!");
   };
 
-  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 text-blue-600 animate-spin" /></div>;
+  if (isLoading) return <FullPageLoader text="Carregant dispositius..." />;
 
   return (
     // FIX VISUAL: pt-10 afegeix el marge superior necessari perquè no toqui el sostre
@@ -97,7 +101,7 @@ export default function RaspberryScreen() {
       
       {/* BOTÓ DE TORNAR ENRERE (NOU) */}
       <button 
-        onClick={() => window.location.href = '/notes'} 
+        onClick={() => navigate('/notes')} 
         className="group flex items-center text-sm font-medium text-slate-500 hover:text-blue-600 mb-2 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FullPageLoader } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 
 const AVAILABLE_LANGUAGES = [
@@ -19,7 +20,7 @@ const AVAILABLE_LANGUAGES = [
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Array per gestionar els idiomes visualment
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['ca', 'es']);
@@ -32,12 +33,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const response = await api.get('/users/me'); // Ajusta a la teva ruta real
+        setIsLoading(true);
+        const response = await api.get('/user/me');
         if (response.data.preferredLanguage) {
           setSelectedLangs(response.data.preferredLanguage.split(','));
         }
       } catch (error) {
         console.error("No s'han pogut carregar les preferències");
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchUserData();
@@ -83,6 +87,8 @@ export default function SettingsScreen() {
       setIsLoading(false);
     }
   };
+
+  if (isLoading) return <FullPageLoader text="Carregant preferències..." />;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pt-6 pb-12 px-4 sm:px-0">

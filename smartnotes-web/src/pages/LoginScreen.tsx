@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { api } from '@/services/api';
+import { getToken, isTokenExpired, clearAuth } from '@/lib/auth';
 
 export default function LoginScreen() {
   const navigate = useNavigate();
@@ -15,13 +16,15 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
-    
-    if (token) {
-      if (role === 'alumne') navigate('/student');
-      else navigate('/notes');
+    const token = getToken();
+    if (!token) return;
+    if (isTokenExpired(token)) {
+      clearAuth();
+      return;
     }
+    const role = localStorage.getItem('role');
+    if (role === 'alumne') navigate('/student');
+    else navigate('/notes');
   }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {

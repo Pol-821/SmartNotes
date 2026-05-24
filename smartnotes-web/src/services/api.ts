@@ -1,6 +1,14 @@
 import axios from 'axios';
+import { STORAGE_KEYS, clearAuth, getToken } from '@/lib/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5065/api';
+
+type NavigateFn = (path: string) => void;
+let navigateFn: NavigateFn | null = null;
+
+export function setNavigateFn(fn: NavigateFn) {
+  navigateFn = fn;
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,7 +18,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -49,13 +57,10 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refreshToken');
+      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
       if (!refreshToken) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('role');
-        localStorage.removeItem('email');
-        window.location.href = '/login';
+        clearAuth();
+        navigateFn?.('/login');
         return Promise.reject(error);
       }
 
@@ -69,11 +74,8 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('role');
-        localStorage.removeItem('email');
-        window.location.href = '/login';
+        clearAuth();
+        navigateFn?.('/login');
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

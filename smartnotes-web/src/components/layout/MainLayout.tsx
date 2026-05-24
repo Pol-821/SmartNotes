@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ActiveJobsWidget from '@/components/ActiveJobsWidget';
 import { api } from '@/services/api';
+import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 
 interface MainLayoutProps {
@@ -25,7 +26,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newClassroomName, setNewClassroomName] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const { user: userProfile } = useUser();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -49,19 +50,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   useEffect(() => {
     fetchClassrooms();
-  }, []);
-
-  const fetchProfile = async () => {
-    try {
-      const response = await api.get('/user/me');
-      setUserProfile(response.data);
-    } catch {
-      // Fallback: mantenir valors anteriors
-    }
-  };
-
-  useEffect(() => {
-    fetchProfile();
   }, []);
 
   // 2. Crear una Aula nova
@@ -215,7 +203,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </div>
             <div className="flex flex-col text-left">
               <span className="text-sm font-semibold text-slate-900">{userProfile?.username || 'Usuari'}</span>
-              <span className="text-xs text-slate-500">{userProfile?.role === 'alumne' ? 'Alumne' : 'Professor'}</span>
+              {userProfile ? (
+                <span className="text-xs text-slate-500">{userProfile.role === 'alumne' ? 'Alumne' : 'Professor'}</span>
+              ) : (
+                <span className="text-xs text-slate-400">...</span>
+              )}
             </div>
           </div>
           <Button 

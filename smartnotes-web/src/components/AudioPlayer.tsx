@@ -52,7 +52,6 @@ export default function AudioPlayer({ audioUrl }: AudioPlayerProps) {
     return () => {
       abortController.abort();
       if (blobUrl) URL.revokeObjectURL(blobUrl);
-      if (audioSource) URL.revokeObjectURL(audioSource);
     };
   }, [audioUrl]);
 

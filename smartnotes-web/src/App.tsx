@@ -1,40 +1,58 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import LandingScreen from './pages/LandingScreen';
-import LoginScreen from './pages/LoginScreen';
-import MainLayout from './components/layout/MainLayout';
-import DashboardScreen from './pages/DashboardScreen';
-import RegisterScreen from './pages/RegisterScreen';
-import ForgotPasswordScreen from './pages/ForgotPasswordScreen';
-import PricingScreen from './pages/PricingScreen';
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-import NoteScreen from './pages/NoteScreen';
-import ClassroomScreen from '@/pages/ClassroomScreen';
-import StudentDashboard from '@/pages/StudentDashboard';
-import StudentClassroomScreen from '@/pages/StudentClassroomScreen';
-import StudentNoteScreen from '@/pages/StudentNoteScreen';
-import RaspberryScreen from '@/pages/RaspberryScreen';
-import SettingsScreen from '@/pages/SettingsScreen';
-import SubscriptionPage from '@/pages/SubscriptionPage';
+import { useEffect } from 'react';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { UserProvider } from '@/contexts/UserContext';
+import { setNavigateFn } from '@/services/api';
+import { useNavigate } from 'react-router-dom';
+import { getToken, isTokenExpired, clearAuth } from '@/lib/auth';
+import { FullPageLoader } from '@/components/ui/spinner';
+
+const LandingScreen = React.lazy(() => import('./pages/LandingScreen'));
+const LoginScreen = React.lazy(() => import('./pages/LoginScreen'));
+const MainLayout = React.lazy(() => import('./components/layout/MainLayout'));
+const DashboardScreen = React.lazy(() => import('./pages/DashboardScreen'));
+const RegisterScreen = React.lazy(() => import('./pages/RegisterScreen'));
+const ForgotPasswordScreen = React.lazy(() => import('./pages/ForgotPasswordScreen'));
+const PricingScreen = React.lazy(() => import('./pages/PricingScreen'));
+const NoteScreen = React.lazy(() => import('./pages/NoteScreen'));
+const ClassroomScreen = React.lazy(() => import('./pages/ClassroomScreen'));
+const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
+const StudentClassroomScreen = React.lazy(() => import('./pages/StudentClassroomScreen'));
+const StudentNoteScreen = React.lazy(() => import('./pages/StudentNoteScreen'));
+const RaspberryScreen = React.lazy(() => import('./pages/RaspberryScreen'));
+const SettingsScreen = React.lazy(() => import('./pages/SettingsScreen'));
+const SubscriptionPage = React.lazy(() => import('./pages/SubscriptionPage'));
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const token = localStorage.getItem('token');
-  if (!token) {
+  const token = getToken();
+  if (!token || isTokenExpired(token)) {
+    if (token) { clearAuth(); }
     return <Navigate to="/login" replace />;
   }
   return <MainLayout>{children}</MainLayout>;
 };
 
 const StudentLayout = ({ children }: { children: React.ReactNode }) => {
-  const token = localStorage.getItem('token');
-  if (!token) {
+  const token = getToken();
+  if (!token || isTokenExpired(token)) {
+    if (token) { clearAuth(); }
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 };
 
 function App() {
+  const navigate = useNavigate();
+  useEffect(() => { setNavigateFn(navigate); }, [navigate]);
   return (
     <BrowserRouter>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <ErrorBoundary>
+      <React.Suspense fallback={<FullPageLoader text="Carregant..." />}>
+      <UserProvider>
       <Routes>
         <Route path="/" element={<LandingScreen />} />
         <Route path="/login" element={<LoginScreen />} />
@@ -52,7 +70,11 @@ function App() {
         <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </UserProvider>
+      </React.Suspense>
       <Toaster position="bottom-right" richColors/>
+      </ErrorBoundary>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -8,11 +8,13 @@ public class R2Service
 {
     private readonly IAmazonS3 _s3;
     private readonly string _bucketName;
+    private readonly ILogger<R2Service> _logger;
 
-    public R2Service(IAmazonS3 s3, IConfiguration config)
+    public R2Service(IAmazonS3 s3, IConfiguration config, ILogger<R2Service> logger)
     {
         _s3 = s3;
         _bucketName = config["CloudflareR2:Bucket"] ?? "smartnotes";
+        _logger = logger;
     }
 
     public async Task<string> UploadAsync(Stream fileStream, string fileName, string contentType, CancellationToken ct = default)
@@ -38,7 +40,40 @@ public class R2Service
             Key = key
         };
         var response = await _s3.GetObjectAsync(request, ct);
-        return response.ResponseStream;
+        return new DisposableResponseStream(response.ResponseStream, response);
+    }
+
+    private sealed class DisposableResponseStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly IDisposable _response;
+
+        public DisposableResponseStream(Stream inner, IDisposable response)
+        {
+            _inner = inner;
+            _response = response;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+                _response.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     public async Task DownloadToFileAsync(string key, string localPath, CancellationToken ct = default)

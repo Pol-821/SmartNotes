@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Calendar, Play, Download, Loader2, BookOpen } from 'lucide-react';
+import { ArrowLeft, Calendar, Play, Download, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { FullPageLoader } from '@/components/ui/spinner';
 import AudioPlayer from '@/components/AudioPlayer';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
@@ -43,13 +44,7 @@ export default function StudentNoteScreen() {
     if (id) fetchNoteData();
   }, [id, navigate]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <FullPageLoader text="Carregant apunt..." />;
 
   if (!note) return null;
 
