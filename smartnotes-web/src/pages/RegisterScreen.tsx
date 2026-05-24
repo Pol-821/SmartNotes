@@ -34,11 +34,20 @@ export default function RegisterScreen() {
     else navigate('/notes');
   }, [navigate]);
 
-  const toggleLanguage = (lang: string) => {
-    if (languages.includes(lang)) {
-      setLanguages(languages.filter(l => l !== lang));
+  const AVAILABLE_LANGUAGES = [
+    { code: 'ca', name: 'Català' },
+    { code: 'es', name: 'Castellà' },
+    { code: 'en', name: 'Anglès' },
+    { code: 'fr', name: 'Francès' },
+    { code: 'it', name: 'Italià' },
+    { code: 'de', name: 'Alemany' },
+  ];
+
+  const toggleLanguage = (code: string) => {
+    if (languages.includes(code)) {
+      setLanguages(languages.filter(l => l !== code));
     } else {
-      setLanguages([...languages, lang]);
+      setLanguages([...languages, code]);
     }
   };
 
@@ -131,19 +140,19 @@ export default function RegisterScreen() {
               <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <Label>Quins idiomes imparteixes?</Label>
                 <div className="flex flex-wrap gap-2">
-                  {['Català', 'Castellà', 'Anglès', 'Francès'].map((lang) => {
-                    const isSelected = languages.includes(lang);
+                  {AVAILABLE_LANGUAGES.map((lang) => {
+                    const isSelected = languages.includes(lang.code);
                     return (
                       <Button
-                        key={lang}
+                        key={lang.code}
                         type="button"
                         variant={isSelected ? 'default' : 'outline'}
                         size="sm"
                         className={isSelected ? 'bg-slate-800' : 'bg-white'}
-                        onClick={() => toggleLanguage(lang)}
+                        onClick={() => toggleLanguage(lang.code)}
                       >
                         {isSelected && <Check className="mr-1.5 h-3 w-3" />}
-                        {lang}
+                        {lang.name}
                       </Button>
                     );
                   })}
