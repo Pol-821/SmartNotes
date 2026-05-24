@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Settings, LogOut, LayoutDashboard, Plus, Loader2, Cpu, CreditCard, Menu, X } from 'lucide-react';
+import { BookOpen, Settings, LogOut, LayoutDashboard, Plus, Loader2, Cpu, CreditCard, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ActiveJobsWidget from '@/components/ActiveJobsWidget';
