@@ -1,7 +1,7 @@
 # SmartNotes
 
-**Autor:** polmirfer (Pol Martínez i Fernández)
-**Copyright:** © 2026 Pol Martínez i Fernández. Tots els drets reservats.
+**Autor:** Pol821 (Pol Mira i Fernández)
+**Copyright:** © 2026 Pol Mira i Fernández. Tots els drets reservats.
 
 > Aquest software és propietat intel·lectual del seu autor. No està permès el seu ús comercial, distribució o modificació sense autorització explícita.
 
@@ -352,7 +352,7 @@ AllowedOrigins                       # Orígens CORS permesos
 ```bash
 npm run build
 # Variables d'entorn:
-VITE_API_URL  # URL del backend (ex: https://smartnotes-api-971k.onrender.com/api)
+VITE_API_URL  # URL del backend
 ```
 
 ### Raspberry Pi
