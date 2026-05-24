@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
 using SmartNotes.Api.Services.AI;
 using Amazon.S3;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -193,6 +194,11 @@ builder.Services.AddSingleton<R2Service>();
 var app = builder.Build();
 
 app.UseCors("AllowReactApp");
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+});
 
 app.UseHttpsRedirection();
 

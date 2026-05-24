@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { api } from '@/services/api';
 import { getToken, isTokenExpired, clearAuth } from '@/lib/auth';
+import { useUser } from '@/contexts/UserContext';
 
 export default function LoginScreen() {
   const navigate = useNavigate();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { refresh: refreshUser } = useUser();
 
   useEffect(() => {
     const token = getToken();
@@ -48,6 +50,8 @@ export default function LoginScreen() {
       localStorage.setItem('role', userRole);
 
       toast.success('Sessió iniciada correctament');
+      
+      refreshUser();
       
       // CONTROL DE TRÀNSIT: On enviem l'usuari?
       if (userRole === 'alumne') {
