@@ -319,7 +319,7 @@ Subscripció: Free/Pro/Enterprise → Segons/mes per transcriure
 
 ## Atribució i Llicència
 
-Aquest projecte ha estat desenvolupat íntegrament per **Pol Martínez i Fernández**.
+Aquest projecte ha estat desenvolupat íntegrament per **Pol Mira i Fernández**.
 
 **Copyright © 2026 Pol Martínez i Fernández. Tots els drets reservats.**
 
