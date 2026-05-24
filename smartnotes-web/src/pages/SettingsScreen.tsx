@@ -70,7 +70,7 @@ export default function SettingsScreen() {
 
     try {
       setIsLoading(true);
-      await api.put('/users/settings', {
+      await api.put('/user/settings', {
         preferredLanguage: selectedLangs.join(','), // Ho convertim a text per l'API (ex: "ca,es")
         currentPassword: currentPassword || null,
         newPassword: newPassword || null
