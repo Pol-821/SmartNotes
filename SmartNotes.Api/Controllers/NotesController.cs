@@ -55,7 +55,7 @@ namespace SmartNotes.Api.Controllers
             var userId = GetUserId();
             var result = await _noteService.GetNotesByUserAsync(userId, page, pageSize, ct);
             
-            var items = result.Notes.Select(n => new { n.Id, n.Title, n.Content, n.CreatedAt }).ToList();
+            var items = result.Notes.Select(n => new { n.Id, n.Title, n.Content, n.ClassroomId, n.CreatedAt }).ToList();
             return Ok(new 
             {
                 TotalItems = result.TotalCount,
@@ -73,7 +73,7 @@ namespace SmartNotes.Api.Controllers
             var note = await _noteService.GetNoteByIdAsync(userId, id, ct);
             if (note == null) return NotFound();
 
-            return Ok(new { note.Id, note.Title, note.Content, note.CreatedAt });
+            return Ok(new { note.Id, note.Title, note.Content, note.ClassroomId, note.CreatedAt });
         }
 
         [HttpPost]
