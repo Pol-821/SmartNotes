@@ -265,7 +265,6 @@ public class TranscriptionWorker : BackgroundService
                 }
                 catch { }
                 job?.Dispose();
-                }
             }
         }
     }
