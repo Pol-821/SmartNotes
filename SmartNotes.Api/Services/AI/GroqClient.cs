@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace SmartNotes.Api.Services.AI;
@@ -20,7 +21,7 @@ public class GroqClient
         _logger = logger;
     }
 
-    public async Task<string> ChatAsync(string prompt, string idiomaDetectat = "es")
+    public async Task<string> ChatAsync(string prompt, string idiomaDetectat = "es", CancellationToken ct = default)
     {
         var langName = idiomaDetectat switch
         {
@@ -77,7 +78,7 @@ public class GroqClient
             HttpResponseMessage? response = null;
             try
             {
-                response = await _http.PostAsJsonAsync("https://api.groq.com/openai/v1/chat/completions", payload);
+                response = await _http.PostAsJsonAsync("https://api.groq.com/openai/v1/chat/completions", payload, ct);
                 
                 if ((int)response.StatusCode == 429)
                 {

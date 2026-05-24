@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Threading;
 namespace SmartNotes.Api.Models;
-public class TranscriptionJob
+public class TranscriptionJob : IDisposable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public TranscriptionStatus Status { get; set; } = TranscriptionStatus.Pending;
@@ -23,5 +23,11 @@ public class TranscriptionJob
     {
         ProgressMessage = message;
         ProgressPercentage = Math.Min(100, percentage);
+    }
+
+    public void Dispose()
+    {
+        Cancellation?.Cancel();
+        Cancellation?.Dispose();
     }
 }

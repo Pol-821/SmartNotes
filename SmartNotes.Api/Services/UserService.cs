@@ -188,7 +188,17 @@ namespace SmartNotes.Api.Services
             await _context.SaveChangesAsync();
         }
 
-        public async Task RegissterSuccessfulLoginAsync(User user)
+        public async Task<User?> GetByResetTokenAsync(string token)
+        {
+            return await _context.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == token);
+        }
+
+        public string HashPassword(string password)
+        {
+            return BCrypt.Net.BCrypt.HashPassword(password);
+        }
+
+        public async Task RegisterSuccessfulLoginAsync(User user)
         {
             user.FailedLoginAttempts = 0;
             user.LockoutEnd = null;

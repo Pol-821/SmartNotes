@@ -65,7 +65,7 @@ namespace SmartNotes.Api.Controllers
                 return Unauthorized(new { error = "Credencials incorrectes" });
             }
             
-            await _userService.RegissterSuccessfulLoginAsync(user);
+            await _userService.RegisterSuccessfulLoginAsync(user);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             var userAgent = Request.Headers["User-Agent"].ToString();
@@ -151,6 +151,7 @@ namespace SmartNotes.Api.Controllers
 
             user.PasswordResetToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
             user.PasswordResetTokenExpires = DateTime.UtcNow.AddMinutes(15); // Caduca en 15 minuts
+            await _userService.UpdateUserAsync(user);
 
             var resetLink = $"http://localhost:5173/reset-password?token={user.PasswordResetToken}";
 
@@ -165,6 +166,22 @@ namespace SmartNotes.Api.Controllers
             await _emailService.SendEmailAsync(user.Email, "Recupera la teva contrasenya", emailBody);
 
             return Ok(new { message = "Correu enviat correctament." });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(ResetPasswordRequest dto)
+        {
+            var user = await _userService.GetByResetTokenAsync(dto.Token);
+            if (user == null || user.PasswordResetTokenExpires < DateTime.UtcNow)
+                return BadRequest(new { error = "Token invàlid o caducat." });
+
+            user.PasswordHash = _userService.HashPassword(dto.NewPassword);
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpires = null;
+            user.LockoutEnd = null;
+            await _userService.UpdateUserAsync(user);
+
+            return Ok(new { message = "Contrasenya canviada correctament." });
         }
     }
 }

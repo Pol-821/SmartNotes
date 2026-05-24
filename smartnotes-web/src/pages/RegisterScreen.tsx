@@ -55,15 +55,11 @@ export default function RegisterScreen() {
     setIsLoading(true);
 
     try {
-      // Truquem al teu AuthController (Mètode Register)
-      // NOTA: El C# actual només rep Username, Email i Password. 
-      // Enviem també role i languages perquè estiguin preparats per quan actualitzem el Backend.
+      // El backend només accepta username, email i password
       await api.post('/auth/register', {
         username,
         email,
-        password,
-        role,
-        languages
+        password
       });
 
       toast.success('Compte creat correctament!', {

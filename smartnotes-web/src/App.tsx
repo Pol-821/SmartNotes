@@ -24,6 +24,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <MainLayout>{children}</MainLayout>;
 };
 
+const StudentLayout = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -33,12 +41,12 @@ function App() {
         <Route path="/register" element={<RegisterScreen />} />
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/pricing" element={<PricingScreen />} />
-        <Route path="/classrooms/:id" element={<ClassroomScreen />} />
-        <Route path="/student" element={<StudentDashboard />} />
-        <Route path="/student/class/:id" element={<StudentClassroomScreen />} />
-        <Route path="/student/note/:id" element={<StudentNoteScreen />} />
-        <Route path="/raspberry" element={<RaspberryScreen />} />
-        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="/classrooms/:id" element={<ProtectedRoute><ClassroomScreen /></ProtectedRoute>} />
+        <Route path="/student" element={<StudentLayout><StudentDashboard /></StudentLayout>} />
+        <Route path="/student/class/:id" element={<StudentLayout><StudentClassroomScreen /></StudentLayout>} />
+        <Route path="/student/note/:id" element={<StudentLayout><StudentNoteScreen /></StudentLayout>} />
+        <Route path="/raspberry" element={<ProtectedRoute><RaspberryScreen /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
         <Route path="/notes/:id" element={<ProtectedRoute><NoteScreen /></ProtectedRoute>} />
         <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />

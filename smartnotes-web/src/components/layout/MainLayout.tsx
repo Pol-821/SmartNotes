@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Settings, LogOut, LayoutDashboard, Plus, Loader2, Cpu, CreditCard } from 'lucide-react';
+import { BookOpen, Settings, LogOut, LayoutDashboard, Plus, Loader2, Cpu, CreditCard, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ActiveJobsWidget from '@/components/ActiveJobsWidget';
@@ -24,9 +24,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isLoadingClassrooms, setIsLoadingClassrooms] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newClassroomName, setNewClassroomName] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('role');
+    localStorage.removeItem('email');
     navigate('/login');
   };
 
@@ -44,6 +49,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   useEffect(() => {
     fetchClassrooms();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await api.get('/user/me');
+      setUserProfile(response.data);
+    } catch {
+      // Fallback: mantenir valors anteriors
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
   }, []);
 
   // 2. Crear una Aula nova
@@ -81,8 +99,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      
       {/* Menú Lateral (Sidebar) */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col hidden md:flex">
+      <aside className={`w-64 bg-white border-r border-slate-200 flex flex-col fixed md:sticky top-0 h-screen z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-slate-200">
           <BookOpen className="text-blue-600 mr-2" size={24} />
@@ -188,11 +211,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <div className="p-4 border-t border-slate-200">
           <div className="flex items-center gap-3 px-3 py-2 mb-2">
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
-              PM 
+              {userProfile?.username ? userProfile.username.charAt(0).toUpperCase() + (userProfile.username.charAt(1)?.toUpperCase() || '') : '?'}
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-sm font-semibold text-slate-900">Pol M.</span>
-              <span className="text-xs text-slate-500">Professor</span>
+              <span className="text-sm font-semibold text-slate-900">{userProfile?.username || 'Usuari'}</span>
+              <span className="text-xs text-slate-500">{userProfile?.role === 'alumne' ? 'Alumne' : 'Professor'}</span>
             </div>
           </div>
           <Button 
@@ -209,6 +232,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
       {/* Contingut Principal */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 md:hidden">
+          <button onClick={() => setSidebarOpen(true)} className="mr-3 text-slate-600">
+            <Menu size={24} />
+          </button>
           <BookOpen className="text-blue-600 mr-2" size={24} />
           <span className="font-bold text-lg text-slate-900">SmartNotes</span>
         </header>

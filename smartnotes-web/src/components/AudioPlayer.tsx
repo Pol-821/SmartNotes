@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '@/services/api';
 
 interface AudioPlayerProps {
-  audioUrl: string; // Ex: '/transcriptions/2/audio'
+  audioUrl: string;
 }
 
 export default function AudioPlayer({ audioUrl }: AudioPlayerProps) {
@@ -14,57 +14,66 @@ export default function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   
-  // Estats de càrrega segura
   const [audioSource, setAudioSource] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. DESCARREGA SEGURA DE L'ÀUDIO
   useEffect(() => {
+    const abortController = new AbortController();
+    let blobUrl: string | null = null;
+
     const fetchAudio = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        // Fem la petició GET a través d'axios dient-li que esperem un arxiu (blob)
-        // L'instància "api" ja s'encarrega de posar el JWT Token!
-        const response = await api.get(audioUrl, { responseType: 'blob' });
+        const response = await api.get(audioUrl, { 
+          responseType: 'blob',
+          signal: abortController.signal 
+        });
         
-        // Convertim el fitxer rebut en una URL local que l'etiqueta <audio> sí que entén
-        const blobUrl = URL.createObjectURL(response.data);
-        setAudioSource(blobUrl);
-      } catch (err) {
+        blobUrl = URL.createObjectURL(response.data);
+        if (!abortController.signal.aborted) {
+          setAudioSource(blobUrl);
+        }
+      } catch (err: any) {
+        if (abortController.signal.aborted) return;
         console.error("Error carregant l'àudio:", err);
-        setError("No s'ha pogut carregar l'arxiu d'àudio. És possible que no existeixi.");
+        setError("No s'ha pogut carregar l'arxiu d'àudio.");
       } finally {
-        setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchAudio();
 
-    // Neteja la memòria quan tanquem el component
     return () => {
+      abortController.abort();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
       if (audioSource) URL.revokeObjectURL(audioSource);
     };
   }, [audioUrl]);
 
-  // 2. GESTIÓ DEL REPRODUCTOR FÍSIC
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
+    if (audioRef.current.paused) {
+      audioRef.current.play().catch(() => {
+        setError("No s'ha pogut reproduir l'àudio.");
+      });
+      setIsPlaying(true);
     } else {
-      audioRef.current.play();
+      audioRef.current.pause();
+      setIsPlaying(false);
     }
-    setIsPlaying(!isPlaying);
-  };
+  }, []);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (!audioRef.current) return;
-    audioRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
-  };
+    audioRef.current.muted = !audioRef.current.muted;
+    setIsMuted(prev => !prev);
+  }, []);
 
   const handleTimeUpdate = () => {
     if (!audioRef.current) return;
@@ -81,7 +90,7 @@ export default function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || duration <= 0) return;
     const newTime = (Number(e.target.value) / 100) * duration;
     audioRef.current.currentTime = newTime;
     setProgress(Number(e.target.value));
@@ -121,6 +130,7 @@ export default function AudioPlayer({ audioUrl }: AudioPlayerProps) {
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => setIsPlaying(false)}
+        onError={() => setError("Error reproduint l'àudio.")}
       />
       
       <div className="flex items-center gap-4">

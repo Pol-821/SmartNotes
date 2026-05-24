@@ -31,10 +31,15 @@ namespace SmartNotes.Api.Controllers
             _r2 = r2;
         }
 
-        public class MoveNoteDto
-        {
-            public int? ClassroomId { get; set; }
-        }
+    public class MoveNoteDto
+    {
+        public int? ClassroomId { get; set; }
+    }
+
+    public class SetPublicDto
+    {
+        public bool IsPublic { get; set; }
+    }
 
         private int GetUserId() => User.GetUserId();
 
@@ -42,6 +47,9 @@ namespace SmartNotes.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetNotes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 10;
+            if (pageSize > 100) pageSize = 100;
             var userId = GetUserId();
             var result = await _noteService.GetNotesByUserAsync(userId, page, pageSize);
             
@@ -120,17 +128,7 @@ namespace SmartNotes.Api.Controllers
 
             // 1. Pujar directament a R2
             var ext = Path.GetExtension(audioFile.FileName).ToLowerInvariant();
-            var mimeType = ext switch
-            {
-                ".wav" => "audio/wav",
-                ".mp3" => "audio/mpeg",
-                ".m4a" => "audio/mp4",
-                ".flac" => "audio/flac",
-                ".ogg" => "audio/ogg",
-                ".aac" => "audio/aac",
-                ".wma" => "audio/x-ms-wma",
-                _ => "application/octet-stream"
-            };
+            var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(audioFile.FileName);
 
             string s3Key;
             byte[] audioBytes;
@@ -237,11 +235,11 @@ namespace SmartNotes.Api.Controllers
         }
 
         [HttpPatch("{id}/public")]
-        public async Task<IActionResult> SetPublicStatus(int id, [FromBody] bool isPublic)
+        public async Task<IActionResult> SetPublicStatus(int id, [FromBody] SetPublicDto dto)
         {
             var userId = GetUserId();
-            var publicId = await _noteService.TogglePublicAccessAsync(id, userId, isPublic);
-            return Ok(new { isPublic, publicId });
+            var publicId = await _noteService.TogglePublicAccessAsync(id, userId, dto.IsPublic);
+            return Ok(new { isPublic = dto.IsPublic, publicId });
         }
 
         [AllowAnonymous]

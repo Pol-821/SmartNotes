@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { FullPageLoader } from '@/components/ui/spinner';
-import RescueModal from '@/components/RescueModal';
 import { toast } from 'sonner';
 
 export default function DashboardScreen() {
@@ -15,9 +14,6 @@ export default function DashboardScreen() {
   const [notes, setNotes] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [failedFileName] = useState('');
 
   const fetchData = async () => {
     try {
@@ -44,19 +40,21 @@ export default function DashboardScreen() {
 
   // REVISIÓ AUTOMÀTICA (POLLING)
   useEffect(() => {
-    const isProcessing = notes.some(note => note.content?.includes('[⏳'));
+    const hasProcessing = notes.some(note => note.content?.includes('[⏳'));
+    if (!hasProcessing) return;
     
-    if (isProcessing) {
-      const interval = setInterval(() => {
-        api.get('/notes?page=1&pageSize=50').then(response => {
-          const notesArray = response.data.items || response.data.Items || [];
-          setNotes(notesArray);
-        }).catch(console.error);
-      }, 5000); 
+    const interval = setInterval(async () => {
+      try {
+        const response = await api.get('/notes?page=1&pageSize=50');
+        const notesArray = response.data.items || response.data.Items || [];
+        setNotes(notesArray);
+      } catch (err) {
+        console.error("Error polling notes:", err);
+      }
+    }, 5000); 
 
-      return () => clearInterval(interval); 
-    }
-  }, [notes]);
+    return () => clearInterval(interval); 
+  }, []); // <-- només una vegada al mount, no depèn de notes
 
   // Lògica del Cercador i FILTRATGE DE NOTES PENDENTS
   // Només mostrem a la graella les notes que NO tenen l'etiqueta de processament
@@ -185,12 +183,6 @@ export default function DashboardScreen() {
         </div>
       )}
       
-      <RescueModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onRetry={() => toast.info("Reintentant...")}
-        fileName={failedFileName}
-      />
     </div>
   );
 }

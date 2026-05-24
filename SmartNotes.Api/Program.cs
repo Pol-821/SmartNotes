@@ -26,12 +26,12 @@ builder.Services.AddControllers()
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 2048L * 1024L * 1024L; // 2 GB
+    options.Limits.MaxRequestBodySize = 200L * 1024L * 1024L; // 200 MB
 });
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 2048L * 1024L * 1024L; // 2 GB
+    options.MultipartBodyLengthLimit = 200L * 1024L * 1024L; // 200 MB
 });
 
 builder.Services.AddSingleton<AudioPreprocessor>();

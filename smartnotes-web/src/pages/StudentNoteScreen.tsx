@@ -34,7 +34,7 @@ export default function StudentNoteScreen() {
       } catch (error) {
         console.error("Error carregant l'apunt:", error);
         toast.error("No s'ha pogut carregar l'apunt o no hi tens accés");
-        navigate(-1); // Tornem enrere si hi ha error
+        navigate('/student');
       } finally {
         setIsLoading(false);
       }
@@ -59,7 +59,7 @@ export default function StudentNoteScreen() {
         
         {/* BOTÓ DE TORNAR */}
         <button 
-          onClick={() => navigate(-1)} 
+          onClick={() => navigate('/student')} 
           className="group flex items-center text-sm font-medium text-slate-500 hover:text-blue-600 mb-8 transition-colors"
         >
           <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />

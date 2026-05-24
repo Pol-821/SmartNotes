@@ -160,7 +160,7 @@ export default function NoteScreen() {
     <div className="max-w-4xl mx-auto pb-12 relative">
       
       <button 
-        onClick={() => navigate(-1)} 
+        onClick={() => navigate('/notes')} 
         className="group flex items-center text-sm font-medium text-slate-500 hover:text-slate-900 mb-8 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />

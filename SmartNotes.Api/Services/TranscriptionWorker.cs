@@ -231,15 +231,9 @@ public class TranscriptionWorker : BackgroundService
 
                     await db.SaveChangesAsync();
 
-                    var secondsToDeduct = (int)Math.Ceiling(totalDuration);
-
-                    var user = await db.Users.FindAsync(job.UserId);
-                    if (user != null)
-                    {
-                        user.SecondsAvailable -= secondsToDeduct;
-                        Console.WriteLine($"[SISTEMA] Restats {secondsToDeduct} segons ({TimeSpan.FromSeconds(secondsToDeduct):hh\\:mm\\:ss}). Restants: {user.SecondsAvailable} segons.");
-                        await db.SaveChangesAsync();
-                    }
+                    // Nota: els segons ja es descompten al controller d'origen
+                    // (NotesController.UploadAndProcessAudio). No descomptar aquí
+                    // per evitar doble cobrament.
                 }
             }
             catch (OperationCanceledException)
@@ -270,6 +264,8 @@ public class TranscriptionWorker : BackgroundService
                         File.Delete(enhancedLocalPath);
                 }
                 catch { }
+                job?.Dispose();
+                }
             }
         }
     }

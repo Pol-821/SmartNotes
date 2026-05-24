@@ -72,6 +72,12 @@ namespace SmartNotes.Api.Controllers
             if (plan == null || !plan.IsActive)
                 return BadRequest("Pla no vàlid.");
 
+            // Comprovar que el pla tingui un preu (>0) o que sigui el Free
+            if (plan.PriceMonthly > 0 && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")))
+            {
+                return StatusCode(402, new { error = "Aquest pla requereix pagament. Configura STRIPE_SECRET_KEY al servidor." });
+            }
+
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
                 return NotFound("Usuari no trobat.");
@@ -79,6 +85,12 @@ namespace SmartNotes.Api.Controllers
             var existingSub = await _context.UserSubscriptions
                 .Where(s => s.UserId == userId && s.IsActive)
                 .FirstOrDefaultAsync();
+
+            // Si ja està subscrit al mateix pla, no afegir segons duplicats
+            if (existingSub != null && existingSub.PlanId == plan.Id)
+            {
+                return BadRequest(new { error = "Ja estàs subscrit a aquest pla." });
+            }
 
             if (existingSub != null)
             {

@@ -53,9 +53,12 @@ namespace SmartNotes.Api.Services
         private string GenerateClassCode()
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            var random = new Random();
-            return new string(Enumerable.Repeat(chars, 6)
-                .Select(s => s[random.Next(s.Length)]).ToArray());
+            return string.Create(6, chars, (buffer, alphabet) =>
+            {
+                var rng = System.Security.Cryptography.RandomNumberGenerator.GetBytes(6);
+                for (int i = 0; i < 6; i++)
+                    buffer[i] = alphabet[rng[i] % alphabet.Length];
+            });
         }
 
         public async Task<bool> JoinClassroomAsync(int userId, string code)

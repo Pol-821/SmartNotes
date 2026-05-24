@@ -44,22 +44,27 @@ public class TranscriptionController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
+        if (file.Length > 200L * 1024L * 1024L)
+            return BadRequest("File too large. Maximum 200 MB.");
+
+        var userId = GetUserId();
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+            return NotFound("Usuari no trobat.");
+
+        // Comprovar saldo (estimar durada per mida ~64kbps)
+        var estimatedSeconds = (int)(file.Length / 8000.0);
+        if (user.SecondsAvailable < estimatedSeconds)
+        {
+            return StatusCode(402, new { error = "No tens suficients minuts per processar aquesta transcripció." });
+        }
+
         var allowedExtensions = new[] { ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".wma" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))
             return BadRequest($"Unsupported file type. Allowed: {string.Join(", ", allowedExtensions)}");
 
-        var mimeType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".mp3" => "audio/mpeg",
-            ".m4a" => "audio/mp4",
-            ".flac" => "audio/flac",
-            ".ogg" => "audio/ogg",
-            ".aac" => "audio/aac",
-            ".wma" => "audio/x-ms-wma",
-            _ => "application/octet-stream"
-        };
+        var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(file.FileName);
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
@@ -67,21 +72,25 @@ public class TranscriptionController : ControllerBase
 
         var s3Key = await _r2.UploadAsync(ms, file.FileName, mimeType);
 
-        var userID = GetUserId();
+        // Cobrar el peatge (estimació)
+        user.SecondsAvailable -= estimatedSeconds;
 
         var job = _store.CreateJob();
         job.FilePath = s3Key;
         job.Status = TranscriptionStatus.Pending;
-        job.UserId = userID!;
+        job.UserId = userId;
         job.OriginalFileName = file.FileName;
 
         _store.Update(job);
         _queue.Enqueue(job);
 
-        return Ok(new { jobId = job.Id });
+        await _db.SaveChangesAsync();
+
+        return Ok(new { jobId = job.Id, remainingBalance = user.SecondsAvailable });
     }
 
     [HttpGet("{id}")]
+    [Authorize]
     public IActionResult Get(string id)
     {
         var job = _store.Get(id);
@@ -92,6 +101,7 @@ public class TranscriptionController : ControllerBase
     }
 
     [HttpPost("{id}/cancel")]
+    [Authorize]
     public IActionResult Cancel(string id)
     {
         var job = _store.Get(id);
@@ -152,22 +162,10 @@ public class TranscriptionController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
-        var allowedExtensions = new[] { ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".wma" };
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!allowedExtensions.Contains(ext))
-            return BadRequest($"Unsupported file type. Allowed: {string.Join(", ", allowedExtensions)}");
+        if (!MimeTypeHelper.IsAllowed(file.FileName))
+            return BadRequest($"Unsupported file type. Allowed: {string.Join(", ", MimeTypeHelper.AllowedExtensionsArray)}");
 
-        var mimeType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".mp3" => "audio/mpeg",
-            ".m4a" => "audio/mp4",
-            ".flac" => "audio/flac",
-            ".ogg" => "audio/ogg",
-            ".aac" => "audio/aac",
-            ".wma" => "audio/x-ms-wma",
-            _ => "application/octet-stream"
-        };
+        var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(file.FileName);
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
@@ -232,6 +230,7 @@ public class TranscriptionController : ControllerBase
     }
 
     [HttpGet("status/{id}")]
+    [Authorize]
     public IActionResult GetStatus(string id)
     {
         var job = _store.Get(id);
@@ -251,10 +250,16 @@ public class TranscriptionController : ControllerBase
         });
     }
     [HttpPost("{id}/retry")]
+    [Authorize]
     public async Task<IActionResult> RetryTranscription(string id, [FromBody] RetryRequest request)
     {
         var record = await _db.Transcriptions.FirstOrDefaultAsync(t => t.JobId == id);
         if (record == null) return NotFound("Transcripció no trobada.");
+
+        // Verificar que l'usuari sigui el propietari
+        var userId = GetUserId();
+        if (record.UserId != userId)
+            return Forbid();
 
         if (string.IsNullOrEmpty(record.EnhancedAudioPath))
         {
@@ -263,13 +268,16 @@ public class TranscriptionController : ControllerBase
 
         var retryJob = new TranscriptionJob
         {
+            Id = Guid.NewGuid().ToString(),
             UserId = record.UserId,
             OriginalFileName = record.OriginalFileName + $" (Reintent {request.LanguageCode})",
             FilePath = record.EnhancedAudioPath, 
             IsRetry = true,
-            ForcedLanguage = request.LanguageCode.ToLower()
+            ForcedLanguage = request.LanguageCode.ToLower(),
+            Cancellation = new CancellationTokenSource()
         };
 
+        _store.Update(retryJob);
         await _queue.EnqueueAsync(retryJob);
 
         return Accepted(new { 
@@ -279,10 +287,13 @@ public class TranscriptionController : ControllerBase
     }
 
     [HttpGet("active")]
+    [Authorize]
     public IActionResult GetActiveJobs([FromServices] TranscriptionStore store)
     {
+        var userId = GetUserId();
         var activeJobs = store.GetAll()
-            .Where(j => j.Status != TranscriptionStatus.Done && 
+            .Where(j => j.UserId == userId &&
+                        j.Status != TranscriptionStatus.Done && 
                         j.Status != TranscriptionStatus.Error && 
                         j.Status != TranscriptionStatus.Cancelled)
             .Select(j => new 
