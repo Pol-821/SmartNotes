@@ -118,112 +118,121 @@ namespace SmartNotes.Api.Controllers
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> UploadAndProcessAudio([FromForm] string title, IFormFile audioFile, CancellationToken ct = default)
         {
-            var userId = GetUserId(); 
-            var user = await _userService.GetByIdAsync(userId, ct);
-            if (user == null) return NotFound("Usuari no trobat");
-
-            if (audioFile == null || audioFile.Length == 0)
-                return BadRequest("No s'ha enviat cap arxiu d'àudio.");
-
-            // 1. Pujar directament a R2
-            var ext = Path.GetExtension(audioFile.FileName).ToLowerInvariant();
-            var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(audioFile.FileName);
-
-            string s3Key;
-            byte[] audioBytes;
-            using (var ms = new MemoryStream())
-            {
-                await audioFile.CopyToAsync(ms, ct);
-                audioBytes = ms.ToArray();
-                ms.Position = 0;
-                s3Key = await _r2.UploadAsync(ms, audioFile.FileName, mimeType, ct);
-            }
-
-            // 2. Extreure la durada real amb ffprobe
-            int realDurationSeconds = 0;
             try
             {
-                var tempAudioPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}{ext}");
+                var userId = GetUserId(); 
+                var user = await _userService.GetByIdAsync(userId, ct);
+                if (user == null) return NotFound("Usuari no trobat");
+
+                if (audioFile == null || audioFile.Length == 0)
+                    return BadRequest("No s'ha enviat cap arxiu d'àudio.");
+
+                // 1. Pujar directament a R2
+                var ext = Path.GetExtension(audioFile.FileName).ToLowerInvariant();
+                var mimeType = MimeTypeHelper.GetMimeTypeOrDefault(audioFile.FileName);
+
+                string s3Key;
+                byte[] audioBytes;
+                using (var ms = new MemoryStream())
+                {
+                    await audioFile.CopyToAsync(ms, ct);
+                    audioBytes = ms.ToArray();
+                    ms.Position = 0;
+                    s3Key = await _r2.UploadAsync(ms, audioFile.FileName, mimeType, ct);
+                }
+
+                // 2. Extreure la durada real amb ffprobe
+                int realDurationSeconds = 0;
                 try
                 {
-                    await System.IO.File.WriteAllBytesAsync(tempAudioPath, audioBytes, ct);
-                    var psi = new System.Diagnostics.ProcessStartInfo
+                    var tempAudioPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}{ext}");
+                    try
                     {
-                        FileName = "ffprobe",
-                        Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{tempAudioPath}\"",
-                        RedirectStandardOutput = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    using var proc = new System.Diagnostics.Process { StartInfo = psi };
-                    proc.Start();
-                    var output = await proc.StandardOutput.ReadToEndAsync();
-                    await proc.WaitForExitAsync(ct);
-                    if (double.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var dur))
+                        await System.IO.File.WriteAllBytesAsync(tempAudioPath, audioBytes, ct);
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "ffprobe",
+                            Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{tempAudioPath}\"",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var proc = new System.Diagnostics.Process { StartInfo = psi };
+                        proc.Start();
+                        var output = await proc.StandardOutput.ReadToEndAsync();
+                        await proc.WaitForExitAsync(ct);
+                        if (double.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var dur))
+                        {
+                            realDurationSeconds = (int)Math.Ceiling(dur);
+                        }
+                    }
+                    finally
                     {
-                        realDurationSeconds = (int)Math.Ceiling(dur);
+                        if (System.IO.File.Exists(tempAudioPath))
+                            System.IO.File.Delete(tempAudioPath);
                     }
                 }
-                finally
+                catch (Exception ex)
                 {
-                    if (System.IO.File.Exists(tempAudioPath))
-                        System.IO.File.Delete(tempAudioPath);
+                    _logger.LogWarning(ex, "Error obtenint durada de l'àudio");
+                    realDurationSeconds = 0;
+                }
+
+                if (realDurationSeconds <= 0)
+                {
+                    // Fallback: estimar per mida (assumint ~64kbps per veu)
+                    realDurationSeconds = (int)(audioFile.Length / 8000.0);
+                    _logger.LogInformation("Durada estimada per mida: {Duration}s", realDurationSeconds);
+                }
+
+                // 3. Comprovar si té prou minuts i cobrar atòmicament
+                if (!await _userService.TryDeductSecondsAsync(userId, realDurationSeconds, ct))
+                {
+                    await _r2.DeleteAsync(s3Key, ct);
+                    int minutsNecessaris = realDurationSeconds / 60;
+                    return StatusCode(402, new { error = $"L'àudio dura {minutsNecessaris} minuts, però no tens prou saldo." });
+                }
+
+                try
+                {
+                    // 5. ENCUAR EL TREBALL A LA IA
+                    var jobId = Guid.NewGuid();
+                    var job = new TranscriptionJob
+                    {
+                        Id = jobId.ToString(),
+                        UserId = userId,
+                        FilePath = s3Key,
+                        OriginalFileName = audioFile.FileName,
+                        Status = TranscriptionStatus.Pending,
+                        Cancellation = new CancellationTokenSource()
+                    };
+                    await _queue.EnqueueAsync(job);
+
+                    // 6. Crear la nota PENDENT
+                    string contingutTemporal = $"[⏳ Transcripció en curs...] Aquesta classe ha durat {realDurationSeconds / 60} minuts i {realDurationSeconds % 60} segons. Whisper i Llama hi estan treballant...";
+                    var note = await _noteService.CreateNoteAsync(userId, string.IsNullOrEmpty(title) ? "Sense títol" : title, contingutTemporal, jobId.ToString(), ct);
+
+                    var freshUser = await _userService.GetByIdAsync(userId, ct);
+                    return Ok(new { 
+                        message = "Àudio pujat correctament. La IA ja està treballant.", 
+                        audioDuration = realDurationSeconds,
+                        remainingBalance = freshUser?.SecondsAvailable ?? 0,
+                        noteId = note.Id 
+                    });
+                }
+                catch (Exception innerEx)
+                {
+                    // Reemborsar si falla després del cobrament
+                    await _userService.RefundSecondsAsync(userId, realDurationSeconds, ct);
+                    await _r2.DeleteAsync(s3Key, ct);
+                    _logger.LogError(innerEx, "Error processant l'àudio després del cobrament");
+                    return StatusCode(500, new { error = "Error processant l'àudio: " + innerEx.Message });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error obtenint durada de l'àudio");
-                realDurationSeconds = 0;
-            }
-
-            if (realDurationSeconds <= 0)
-            {
-                // Fallback: estimar per mida (assumint ~64kbps per veu)
-                realDurationSeconds = (int)(audioFile.Length / 8000.0);
-                _logger.LogInformation("Durada estimada per mida: {Duration}s", realDurationSeconds);
-            }
-
-            // 3. Comprovar si té prou minuts i cobrar atòmicament
-            if (!await _userService.TryDeductSecondsAsync(userId, realDurationSeconds, ct))
-            {
-                await _r2.DeleteAsync(s3Key, ct);
-                int minutsNecessaris = realDurationSeconds / 60;
-                return StatusCode(402, new { error = $"L'àudio dura {minutsNecessaris} minuts, però no tens prou saldo." });
-            }
-
-            try
-            {
-                // 5. ENCUAR EL TREBALL A LA IA
-                var jobId = Guid.NewGuid();
-                var job = new TranscriptionJob
-                {
-                    Id = jobId.ToString(),
-                    UserId = userId,
-                    FilePath = s3Key,
-                    OriginalFileName = audioFile.FileName,
-                    Status = TranscriptionStatus.Pending,
-                    Cancellation = new CancellationTokenSource()
-                };
-                await _queue.EnqueueAsync(job);
-
-                // 6. Crear la nota PENDENT
-                string contingutTemporal = $"[⏳ Transcripció en curs...] Aquesta classe ha durat {realDurationSeconds / 60} minuts i {realDurationSeconds % 60} segons. Whisper i Llama hi estan treballant...";
-                var note = await _noteService.CreateNoteAsync(userId, string.IsNullOrEmpty(title) ? "Sense títol" : title, contingutTemporal, jobId.ToString(), ct);
-
-                var freshUser = await _userService.GetByIdAsync(userId, ct);
-                return Ok(new { 
-                    message = "Àudio pujat correctament. La IA ja està treballant.", 
-                    audioDuration = realDurationSeconds,
-                    remainingBalance = freshUser?.SecondsAvailable ?? 0,
-                    noteId = note.Id 
-                });
-            }
-            catch
-            {
-                // Reemborsar si falla després del cobrament
-                await _userService.RefundSecondsAsync(userId, realDurationSeconds, ct);
-                await _r2.DeleteAsync(s3Key, ct);
-                throw;
+                _logger.LogError(ex, "Error general a UploadAndProcessAudio");
+                return StatusCode(500, new { error = "Error: " + ex.Message, type = ex.GetType().Name });
             }
         }
 
