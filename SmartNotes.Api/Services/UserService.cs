@@ -268,7 +268,7 @@ namespace SmartNotes.Api.Services
         {
             var rows = await _context.Database.ExecuteSqlRawAsync(
                 "UPDATE \"Users\" SET \"SecondsAvailable\" = \"SecondsAvailable\" - {0} WHERE \"Id\" = {1} AND \"SecondsAvailable\" >= {0}",
-                seconds, userId, ct);
+                new object[] { seconds, userId }, ct);
             return rows > 0;
         }
 
@@ -276,7 +276,7 @@ namespace SmartNotes.Api.Services
         {
             await _context.Database.ExecuteSqlRawAsync(
                 "UPDATE \"Users\" SET \"SecondsAvailable\" = \"SecondsAvailable\" + {0} WHERE \"Id\" = {1}",
-                seconds, userId, ct);
+                new object[] { seconds, userId }, ct);
         }
     }
 }
